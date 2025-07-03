@@ -1,0 +1,20 @@
+{
+  "name": "diabetes-prediction-mern",
+  "version": "1.0.0",
+  "description": "MERN Stack Diabetes Prediction App with Vite",
+  "main": "server/server.js",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\" \"npm run ml-api\"",
+    "server": "cd server && npm run dev",
+    "client": "cd client && npm run dev",
+    "ml-api": "cd ml-backend && python app.py",
+    "install-all": "npm install && cd client && npm install && cd ../server && npm install && cd ../ml-backend && pip install -r requirements.txt",
+    "build": "cd client && npm run build"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "nodemailer": "^7.0.3"
+  }
+}

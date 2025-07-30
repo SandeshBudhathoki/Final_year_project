@@ -3,6 +3,7 @@ const axios = require("axios");
 const { body, validationResult } = require("express-validator");
 const Prediction = require("../models/Prediction");
 const auth = require("../middleware/auth");
+const { admin } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -73,7 +74,7 @@ router.post(
           confidence: mlResult.confidence,
           probabilityDiabetic: mlResult.probability_diabetic,
           probabilityNonDiabetic: mlResult.probability_non_diabetic,
-          riskFactors: mlResult.risk_factors || [],
+          // riskFactors removed
         },
         modelInfo: {
           modelType: mlResult.model_type || "CustomRandomForestClassifier",
@@ -93,7 +94,7 @@ router.post(
           probabilityNonDiabetic: Math.round(
             mlResult.probability_non_diabetic * 100
           ),
-          riskFactors: mlResult.risk_factors || [],
+          // riskFactors removed
           timestamp: prediction.createdAt,
         },
       });
@@ -144,7 +145,7 @@ router.get("/", auth, async (req, res) => {
         probabilityNonDiabetic: Math.round(
           pred.result.probabilityNonDiabetic * 100
         ),
-        riskFactors: pred.result.riskFactors,
+        // riskFactors removed
       },
       createdAt: pred.createdAt,
     }));
@@ -213,21 +214,34 @@ router.get("/stats", auth, async (req, res) => {
 // @access  Private
 router.delete("/:id", auth, async (req, res) => {
   try {
-    const prediction = await Prediction.findOne({
-      _id: req.params.id,
-      userId: req.user._id,
-    });
-
+    const prediction = await Prediction.findById(req.params.id);
     if (!prediction) {
       return res.status(404).json({ message: "Prediction not found" });
     }
-
+    // Allow if admin or owner
+    if (req.user.role !== "admin" && !prediction.userId.equals(req.user._id)) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
     await Prediction.findByIdAndDelete(req.params.id);
-
     res.json({ message: "Prediction deleted successfully" });
   } catch (error) {
     console.error("Delete prediction error:", error);
     res.status(500).json({ message: "Failed to delete prediction" });
+  }
+});
+
+// @route   GET /api/admin/predictions
+// @desc    Get all predictions (admin only)
+// @access  Admin
+router.get("/admin/predictions", auth, admin, async (req, res) => {
+  try {
+    const predictions = await Prediction.find()
+      .populate("userId", "email firstName lastName")
+      .sort({ createdAt: -1 });
+    res.json({ predictions });
+  } catch (error) {
+    console.error("Get all predictions (admin) error:", error);
+    res.status(500).json({ message: "Server error fetching predictions" });
   }
 });
 

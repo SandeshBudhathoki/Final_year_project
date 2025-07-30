@@ -3,11 +3,15 @@ const jwt = require("jsonwebtoken");
 const { body, validationResult } = require("express-validator");
 const User = require("../models/User");
 const auth = require("../middleware/auth");
+const { admin } = require("../middleware/auth");
 const {
   generateOTP,
   sendOTPEmail,
   verifyOTP,
+  sendEmail,
 } = require("../services/emailService");
+const crypto = require("crypto");
+const Prediction = require("../models/Prediction");
 
 const router = express.Router();
 
@@ -193,11 +197,15 @@ router.post(
     body("firstName")
       .trim()
       .isLength({ min: 2, max: 50 })
-      .withMessage("First name must be between 2 and 50 characters"),
+      .withMessage("First name must be between 2 and 50 characters")
+      .matches(/^[A-Za-z ]+$/)
+      .withMessage("First name can only contain letters and spaces"),
     body("lastName")
       .trim()
       .isLength({ min: 2, max: 50 })
-      .withMessage("Last name must be between 2 and 50 characters"),
+      .withMessage("Last name must be between 2 and 50 characters")
+      .matches(/^[A-Za-z ]+$/)
+      .withMessage("Last name can only contain letters and spaces"),
     body("gender")
       .isIn(["male", "female", "other"])
       .withMessage("Gender must be male, female, or other"),
@@ -207,7 +215,15 @@ router.post(
       .withMessage("Please enter a valid email"),
     body("password")
       .isLength({ min: 6 })
-      .withMessage("Password must be at least 6 characters long"),
+      .withMessage("Password must be at least 6 characters long")
+      .matches(/[A-Z]/)
+      .withMessage("Password must contain at least one uppercase letter")
+      .matches(/[a-z]/)
+      .withMessage("Password must contain at least one lowercase letter")
+      .matches(/[0-9]/)
+      .withMessage("Password must contain at least one number")
+      .matches(/[^A-Za-z0-9]/)
+      .withMessage("Password must contain at least one symbol"),
   ],
   async (req, res) => {
     try {
@@ -318,12 +334,94 @@ router.post(
           gender: user.gender,
           email: user.email,
           lastLogin: user.lastLogin,
+          role: user.role, // Include role for admin redirect
         },
       });
     } catch (error) {
       console.error("Login error:", error);
       res.status(500).json({ message: "Server error during login" });
     }
+  }
+);
+
+// Forgot Password (send 6-digit code)
+router.post("/forgot-password", async (req, res) => {
+  const { email } = req.body;
+  const user = await User.findOne({ email });
+  if (!user) {
+    // Don't reveal if user exists
+    return res.json({
+      message: "If your email is registered, you will receive a reset code.",
+    });
+  }
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  user.resetPasswordToken = code;
+  user.resetPasswordExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+  await user.save();
+  await sendOTPEmail(user.email, code, user.firstName || "");
+  res.json({
+    message: "If your email is registered, you will receive a reset code.",
+  });
+});
+
+// Reset Password (verify code)
+router.post(
+  "/reset-password",
+  [
+    body("email")
+      .isEmail()
+      .normalizeEmail()
+      .withMessage("Please enter a valid email"),
+    body("code")
+      .isLength({ min: 6, max: 6 })
+      .withMessage("Code must be 6 digits"),
+    body("password")
+      .isLength({ min: 6 })
+      .withMessage("Password must be at least 6 characters long")
+      .matches(/[A-Z]/)
+      .withMessage("Password must contain at least one uppercase letter")
+      .matches(/[a-z]/)
+      .withMessage("Password must contain at least one lowercase letter")
+      .matches(/[0-9]/)
+      .withMessage("Password must contain at least one number")
+      .matches(/[^A-Za-z0-9]/)
+      .withMessage("Password must contain at least one symbol"),
+  ],
+  async (req, res) => {
+    const { email, code, password } = req.body;
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        message: "Validation failed",
+        errors: errors.array(),
+      });
+    }
+    console.log("RESET REQUEST:", { email, code, password });
+
+    const user = await User.findOne({ email });
+    if (!user || !user.resetPasswordToken || !user.resetPasswordExpires) {
+      console.log("User or token/expiry missing", { user });
+      return res.status(400).json({ message: "Invalid or expired code." });
+    }
+    if (Date.now() > user.resetPasswordExpires) {
+      console.log("Code expired", {
+        expires: user.resetPasswordExpires,
+        now: Date.now(),
+      });
+      return res.status(400).json({ message: "Code has expired." });
+    }
+    if (user.resetPasswordToken !== code) {
+      console.log("Code mismatch", {
+        expected: user.resetPasswordToken,
+        got: code,
+      });
+      return res.status(400).json({ message: "Invalid code." });
+    }
+    user.password = password; // Make sure your User model hashes passwords!
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+    res.json({ message: "Password has been reset successfully." });
   }
 );
 
@@ -347,6 +445,116 @@ router.get("/me", auth, async (req, res) => {
   } catch (error) {
     console.error("Get user error:", error);
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+// @route   GET /api/admin/users
+// @desc    Get all users (admin only)
+// @access  Admin
+router.get("/admin/users", auth, admin, async (req, res) => {
+  try {
+    const users = await User.find().select("-password");
+    res.json({ users });
+  } catch (error) {
+    console.error("Get all users error:", error);
+    res.status(500).json({ message: "Server error fetching users" });
+  }
+});
+
+// @route   DELETE /api/admin/users/:id
+// @desc    Delete a user (admin only)
+// @access  Admin
+router.delete("/admin/users/:id", auth, admin, async (req, res) => {
+  try {
+    const user = await User.findByIdAndDelete(req.params.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    res.json({ message: "User deleted successfully" });
+  } catch (error) {
+    console.error("Delete user error:", error);
+    res.status(500).json({ message: "Server error deleting user" });
+  }
+});
+
+// @route   PATCH /api/admin/users/:id/role
+// @desc    Update a user's role (admin only)
+// @access  Admin
+router.patch("/admin/users/:id/role", auth, admin, async (req, res) => {
+  try {
+    const { role } = req.body;
+    if (!role || !["user", "admin"].includes(role)) {
+      return res.status(400).json({ message: "Invalid role" });
+    }
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { role },
+      { new: true }
+    );
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    res.json({ message: "User role updated", user });
+  } catch (error) {
+    console.error("Update user role error:", error);
+    res.status(500).json({ message: "Server error updating user role" });
+  }
+});
+
+// @route   PATCH /api/admin/users/:id
+// @desc    Update a user's details (admin only)
+// @access  Admin
+router.patch("/admin/users/:id", auth, admin, async (req, res) => {
+  try {
+    const { firstName, lastName, gender, password, role } = req.body;
+    const update = {};
+    if (firstName) update.firstName = firstName;
+    if (lastName) update.lastName = lastName;
+    if (gender) update.gender = gender;
+    if (role) update.role = role;
+
+    let user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // Update fields
+    Object.assign(user, update);
+
+    // If password is provided, hash it
+    if (password) user.password = password;
+
+    await user.save();
+
+    res.json({ message: "User updated", user });
+  } catch (error) {
+    console.error("Admin update user error:", error);
+    res.status(500).json({ message: "Server error updating user" });
+  }
+});
+
+// @route   GET /api/admin/stats
+// @desc    Get admin dashboard stats (total users, total predictions, recent users, recent predictions)
+// @access  Admin
+router.get("/admin/stats", auth, admin, async (req, res) => {
+  try {
+    const totalUsers = await User.countDocuments();
+    const totalPredictions = await Prediction.countDocuments();
+    const recentUsers = await User.find()
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .select("-password");
+    const recentPredictions = await Prediction.find()
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .populate("userId", "email firstName lastName");
+    res.json({
+      totalUsers,
+      totalPredictions,
+      recentUsers,
+      recentPredictions,
+    });
+  } catch (error) {
+    console.error("Admin stats error:", error);
+    res.status(500).json({ message: "Server error fetching admin stats" });
   }
 });
 

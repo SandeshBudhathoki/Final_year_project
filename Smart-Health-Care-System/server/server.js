@@ -10,6 +10,9 @@ console.log("JWT_SECRET loaded:", process.env.JWT_SECRET);
 
 const app = express();
 
+// Serve uploaded avatars
+app.use('/uploads', express.static(require('path').join(__dirname, 'uploads')));
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -25,6 +28,9 @@ mongoose
 // Routes
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/predictions", require("./routes/predictions"));
+app.use("/api/profile", require("./routes/profile"));
+app.use("/api/doctors", require("./routes/doctor"));
+app.use("/api/appointments", require("./routes/appointment"));
 
 // Health check
 app.get("/api/health", (req, res) => {

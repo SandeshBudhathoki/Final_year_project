@@ -16,6 +16,10 @@ import {
 } from "lucide-react";
 import axios from "axios";
 
+function isNameValid(name) {
+  return /^[A-Za-z ]+$/.test(name);
+}
+
 const Register = () => {
   const [formData, setFormData] = useState({
     firstName: "",
@@ -35,14 +39,32 @@ const Register = () => {
   const navigate = useNavigate();
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value } = e.target;
+    if (name === "firstName" || name === "lastName") {
+      // Only allow letters and spaces
+      setFormData({
+        ...formData,
+        [name]: value.replace(/[^A-Za-z ]/g, ""),
+      });
+    } else {
+      setFormData({
+        ...formData,
+        [name]: value,
+      });
+    }
   };
 
   const handleSendOTP = async (e) => {
     e.preventDefault();
+
+    if (!isNameValid(formData.firstName)) {
+      toast.error("First name can only contain letters and spaces.");
+      return;
+    }
+    if (!isNameValid(formData.lastName)) {
+      toast.error("Last name can only contain letters and spaces.");
+      return;
+    }
 
     if (formData.password !== formData.confirmPassword) {
       toast.error("Passwords do not match");

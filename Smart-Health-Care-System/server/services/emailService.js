@@ -85,8 +85,27 @@ const verifyOTP = (storedOTP, userOTP, expiryTime) => {
   return storedOTP === userOTP;
 };
 
+// Generic email sender for custom subjects and HTML bodies
+const sendEmail = async (to, subject, html) => {
+  try {
+    const mailOptions = {
+      from: '"Smart Health Care System" <noreply@smarthealth.com>',
+      to,
+      subject,
+      html,
+    };
+    const info = await transporter.sendMail(mailOptions);
+    console.log("Email sent successfully: ", info.messageId);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error("Email sending failed:", error);
+    return { success: false, error: error.message };
+  }
+};
+
 module.exports = {
   generateOTP,
   sendOTPEmail,
   verifyOTP,
+  sendEmail,
 };

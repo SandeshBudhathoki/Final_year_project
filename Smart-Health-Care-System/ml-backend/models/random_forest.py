@@ -5,6 +5,10 @@ from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
+feature_names = [
+    'Pregnancies', 'Glucose', 'BloodPressure', 'SkinThickness',
+    'Insulin', 'BMI', 'DiabetesPedigreeFunction', 'Age'
+]
 
 
 class DecisionTree:
@@ -161,6 +165,16 @@ class RandomForestClassifier:
 
         return np.array(probabilities)
 
+    def display_model_build_process(self, feature_names=None):
+        print(f"Random Forest with {self.n_estimators} trees, max depth {self.max_depth}")
+        if feature_names is not None:
+            print(f"Features used: {feature_names}")
+        print(f"Number of trees built: {len(self.trees)}")
+        for idx, tree in enumerate(self.trees[:5]):  # Show info for up to 5 trees
+            print(f"  Tree {idx+1}: Root node type: {tree.tree['type'] if hasattr(tree, 'tree') and tree.tree else 'N/A'}")
+        if len(self.trees) > 5:
+            print(f"  ...and {len(self.trees) - 5} more trees.")
+
 
 class DiabetesPredictor:
     def __init__(self):
@@ -228,3 +242,9 @@ class DiabetesPredictor:
 
         logger.info(f"Model loaded from {filepath}")
         return instance
+
+    def show_training_steps(self):
+        if not self.is_trained:
+            raise ValueError("Train the model first before displaying build process.")
+        self.model.display_model_build_process(self.feature_names)
+

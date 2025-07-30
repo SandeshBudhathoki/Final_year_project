@@ -1,0 +1,1007 @@
+ACKNOWLEDGEMENT
+We would like to take this opportunity to extend our sincere gratitude and appreciation to our Supervisor Ms.Sarita Neupane for providing guidance and support. We are also thankful to our Department Head Mr. Mukesh Prasad Chaudhary for allowing us the opportunity to explore and work on this project. 
+Additionally, we would like to express our heartfelt thanks to our family for their unwavering support and encouragement during the completion of this project. The invaluable lessons and skills we have acquired through this project have enriched our learning experience. This project has been a wonderful experience where we have learnt and experienced many beneficial things.
+We would highly appreciate and heartly welcome suggestion for further improvements.
+  
+ABSTRACT
+Dynamic Load Balancer is a reverse proxy server and load balancer that receives requests from the clients and distributes the requests among a number of available server replicas. In large distributed system, managing and fulfilling requests arriving from large number of clients is a major challenge. Existing algorithms don’t take into consideration the actual level of resources available on a system hosting the replica and instead rely on preset server weights. Dynamic Load Balancer uses the Prequel (Probing to Reduce Queuing and Latency) along with Power of d choices to determine the best replica for handling an arriving request.
+This approach requires receiving load signals from the replicas that contain information which is used to decide the replica that the request is ultimately forwarded. The system can effectively distribute requests among several server replicas. Admin users can also view performance metrics, server health, and manage replicas that are currently available in the system. Ultimately, the load balancer can effectively utilize the available resource when handling requests, maintaining low response times and high throughput.
+Keywords: Probing, Load Signals, Load Balancer, Reverse Proxy Server, Microservice Architecture, Distributed Systems
+ 
+TABLE OF CONTENTS
+ACKNOWLEDGEMENT	i
+ABSTRACT	ii
+LIST OF TABLES	vi
+LIST OF FIGURES	vi
+LIST OF ABBREVIATIONS	vii
+1. INTRODUCTION	1
+1.1 PROBLEM STATEMENT	1
+1.2 OBJECTIVES	2
+1.3 SCOPE AND LIMITATION	2
+1.4 DEVELOPMENT METHODOLOGY	3
+1.5 REPORT ORGANIZATION	4
+2. BACKGROUND STUDY AND LITERATURE REVIEW	6
+2.1 BACKGROUND STUDY	6
+2.2 LITERATURE REVIEW	8
+3. SYSTEM ANALYSIS	10
+3.1 REQUIREMENT ANALYSIS	10
+3.1.1 FUNCTIONAL REQUIREMENTS	10
+Use Case Table:	11
+3.1.2 NON-FUNCTIONAL REQUIREMENTS	14
+3.2 FEASIBILITY ANALYSIS	15
+3.2.1 TECHNICAL FEASIBILITY	15
+3.2.2 OPERATIONAL FEASIBILITY	15
+3.2.3 ECONOMIC FEASIBILITY	15
+3.2.4 SCHEDULE FEASIBILITY	16
+3.3 ANALYSIS	17
+3.3.1 DATA MODELING WITH ENTITY RELATIONSHIP DIAGRAM	17
+3.3.2 PROCESS MODELING USING DATA FLOW DIAGRAM	18
+3.3.3 LEVEL 1: DATA FLOW DIAGRAM OF THE ENTIRE SYSTEM	19
+3.3.4 LEVEL 2: DATA FLOW DIAGRAM OF ADMIN SERVICE	20
+3.3.5 LEVEL 2: DATA FLOW DIAGRAM OF LOAD BALANCER SERVICE	21
+3.3.6 LEVEL 2: DATA FLOW DIAGRAM OF PROBE SERVICE	22
+3.3.7 LEVEL 2: DATA FLOW DIAGRAM OF REVERSE PROXY SERVICE	23
+4. SYSTEM DESIGN	24
+4.1 DESIGN	24
+4.1.1 SYSTEM ARCHITECTURE	24
+4.1.2 DATA DICTIONARY DESIGN	26
+4.1.3 FLOWCHART OF THE WORKING MECHANISM	27
+4.1.4 FLOWCHART OF THE REPLICA HEALTH-CHECK PROCESS	28
+4.2 ALGORITHM DETAILS	29
+4.2.1 POWER OF D CHOICES WITH REPLICA SELECTION USING HOT-COLD LEXICOGRAPHIC (HCL)	29
+5. IMPLEMENTATION AND TESTING	31
+5.1 IMPLEMENTATION	31
+5.1.1 TOOLS USED	31
+5.1.2 IMPLEMENTATION DETAIL	32
+5.2 TESTING	35
+5.2.1 UNIT TEST	35
+5.2.2 TEST CASE FOR SYSTEM TESTING	38
+5.3 RESULT ANALYSIS	40
+6. CONCLUSION	41
+6.1 PROGRESS	41
+6.2 ONGOING	41
+6.3 REMAINING	41
+REFERENCES	42
+APPENDICES	44
+SCREENSHOTS	44
+Homepage	44
+Login Form	44
+Register Form	45
+Dashboard	46
+SOURCE CODE	46
+Probing to Reduce Latency and Queuing Algorithm Implementation	46
+Asynchronous Probing Algorithm	48
+User Authentication Middleware	53
+User Login and Registration	54
+ 
+LIST OF TABLES
+TABLE 1 TEST CASE FOR REVERSE PROXY MODULE	35
+TABLE 2 TEST CASE FOR PROBING MODULE	36
+TABLE 3 TEST CASE FOR PREQUAL ALGORITHM MODULE	37
+TABLE 4 TEST CASE FOR USER REGISTRATION	38
+TABLE 5 COMPARISON OF ROUND-ROBIN AND PREQUAL ALGORITHM	40
+LIST OF FIGURES
+FIGURE 1 USE CASE DIAGRAM FOR LOAD BALANCER	10
+FIGURE 2 GANTT CHART BREAKING DOWN PROJECT LIFE CYCLE	16
+FIGURE 3 ENTITY RELATIONSHIP DIAGRAM OF THE LOAD BALANCER	17
+FIGURE 4 CONTEXT DIAGRAM OF THE LOAD BALANCER	18
+FIGURE 5 LEVEL 1: DATA FLOW DIAGRAM OF THE ENTIRE SYSTEM	19
+FIGURE 6 LEVEL 2: DATA FLOW DIAGRAM OF ADMIN SERVICE	20
+FIGURE 7 LEVEL 2: DATA FLOW DIAGRAM OF LOAD BALANCER SERVICE	21
+FIGURE 8 LEVEL 2: DATA FLOW DIAGRAM OF PROBE SERVICE	22
+FIGURE 9 LEVEL 2: DATA FLOW DIAGRAM OF REVERSE PROXY SERVICE	23
+FIGURE 10 SYSTEM ARCHITECTURE	24
+FIGURE 11 SCHEMA DIAGRAM OF LOAD BALANCER	25
+FIGURE 12 DATA DICTIONARY FOR THE SYSTEM	26
+FIGURE 13 FLOWCHART SHOWING WORKING MECHANISM OF THE REVERSE PROXY	27
+FIGURE 14 FLOWCHART SHOWING REPLICA HEALTH-CHECK PROCESS	28
+ 
+LIST OF ABBREVIATIONS
+API – Application Programming Interface
+CPU – Central Processing Unit
+DFD – Data Flow Diagram
+ER – Entity Relationship
+GB – Giga Bytes
+HCL – Hot Cold Lexicographic
+HTTP – Hyper Text Transfer Protocol
+IP – Internet Protocol
+MB – Mega Bytes
+PodC – Power of d Choices
+Prequel – Probing to Reduce Queuing and Latency
+QN – Nth Quantile
+RIF – Requests-in-flight
+RAM – Random Access Memory
+TCP – Transmission Control Protocol
+
+ 
+1. INTRODUCTION
+The Internet has massively grown over the last decade as more services are provided
+digitally and remotely to users. There are more than 5.4 billion internet users, which is 67%
+of the world’s population. Online businesses such as streaming services and social media sites see traffic of hundreds of millions daily and more than a million users concurrently. It is necessary for web services to load quickly as research has found a direct correlation between website loading times and bounce rates.
+For web applications to serve a massive number of users without impacting user experience, they utilize replicas, which are instances of their application server that are distributed worldwide and load balancing infrastructure that efficiently distributes user requests among these servers. This allows web applications to have high availability, reliability, efficiency, and performance. For this purpose, load balancers use different algorithms to distribute the incoming request based on distance, traffic, replica weight and region to reduce response times as much as possible. But these algorithms do not take into consideration the capability of the replica itself for handling that request. A replica with higher weight may receive more requests compared to replica with lower weight, and subsequently take longer to respond to these requests than the lower weight replica with less traffic.
+Our algorithm takes the actual state of the available replica through probing the replica for load signals which can then be used to determine the best replica for each request in near real-time.
+1.1 PROBLEM STATEMENT
+A primary concern of web applications that serve millions of users simultaneously is effectively distributing incoming load across their server infrastructure while keeping response times low. Reducing response time by efficiently distributing load across all available replica is the primary function of a load balancer. Any load balancing algorithm needs to effectively the load in each replica while also handling errors and failures in which case, traffic needs to be redirected to healthy replicas. As microservice architecture is widely popular for large scale web applications, handling errors, caching, failure recovery all become complex challenges that a load balancing solution needs to manage alongside other considerations such as client distance, load spike, upgrading the system and logging.
+1.2 OBJECTIVES
+•	To implement a load balancing algorithm that effectively distributes incoming requests across server replica
+•	To provide a dashboard that allows users to view server load statistics, manage server replicas and monitor server health.
+1.3 SCOPE AND LIMITATION
+This project focuses on designing and implementing a reverse proxy server and load balancer to efficiently manage traffic distribution across multiple backend servers. Key areas covered in the project include:
+Reverse Proxy: Routing client requests to appropriate replicas based on the selection by the load balancing algorithm.
+Load Balancing: Implementing Prequal and other common load balancing algorithms like Round Robin and Power of d choice.
+Scalability: Supporting dynamic registration and deregistration of servers without affecting the overall operation.
+Fault Tolerance: Implementing health checks to detect replica failures and automatically route traffic away from non-operational servers.
+Logging and Monitoring: Including logging of client requests and server responses for performance tracking, debugging, and analysis. Implementing basic monitoring capabilities to view server load and health status in real time.
+On the other hand, the system has certain limitations compared to other systems, based on the scope of the project and the objective of the project which are:
+Single Point of Failure: The reverse proxy itself can become a single point of failure if not deployed in a high-availability configuration. The project does not cover redundancy for the reverse proxy server.
+Basic Health Checks: Health check mechanisms are limited to simple HTTP status checks. More advanced health checks, such as application-layer or custom heartbeat monitoring, are not covered.
+Limited SSL Support: The SSL termination process is basic, without advanced features such as certificate management or automated renewal.
+No Traffic Encryption: Apart from basic HTTPS support, additional security measures like traffic encryption between reverse proxy and backend servers are not implemented.
+1.4 DEVELOPMENT METHODOLOGY
+This project requires an agile development approach, as the application must respond to changes and uncertainties by being flexible, adaptable, and refined based on feedback. 
+Agile methodology is a structured approach that segments projects into manageable phases, focusing on continuous improvement. The model breaks down large projects into smaller, more manageable chunks, which can result in a software product that is the culmination of multiple smaller iteration.
+ Agile is particularly well-suited for large and complex projects that can be easily divided into smaller parts. In this project, a structured approach was followed, where the work was broken down into smaller sections that were delivered and tested frequently. Each iteration lasted one to three weeks, and the application was refined based on the feedback received.
+ 
+1.5 REPORT ORGANIZATION
+The report of the project is divided into 6 chapters which is further divided into different headings.
+Chapter 1 
+In the Introduction section, an introduction of the project is given. The objectives, problem statements, scope and limitation, methodology are also discussed.
+Chapter 2
+In the background study and literature review section, general concepts and terms that are necessary for understanding the system is reviewed and previous research done in this field of study is discussed which is the starting point of this project.
+Chapter 3
+In the System Analysis section, the architecture and requirements of the system is discussed by breaking down a system into components, analyzing their interactions, and identifying important modules. This uses Use case diagram, Entity Relationship Diagrams, Context Diagram and Data Flow Diagrams. A feasibility study is present for understanding the future requirements and external factors that affect the project.
+Chapter 4
+In the System Design section, the system is described in detail. The system architecture demonstrates the entire system structure, the data dictionary includes the structure of all the data that is stored in the system, and the flow charts illustrate important processes in the system.
+Chapter 5
+In Implementation and Testing section, description of procedure, methods, algorithm is included alongside the explanation of functionalities of the system as different modules. including the tools that are used to build the system and tools that support the development. It also includes unit and system testing used to validate system’s functioning.
+Chapter 6
+In Conclusion, the progress of the project is described along with current ongoing development process and remaining work on the project. 
+ 
+2. BACKGROUND STUDY AND LITERATURE REVIEW
+2.1 BACKGROUND STUDY
+Traditionally, web applications followed a monolithic architecture where a single server handled all incoming client requests. While this approach worked for small-scale applications, it struggled to keep up with the demands of modern, large-scale systems. With the rise of cloud computing and distributed systems, server architectures evolved into multi-server environments where requests need to be intelligently managed across a fleet of servers. This is where load balancers and reverse proxies play an essential role.
+Load Balancer
+A load balancer is a network device or software application that distributes incoming client requests across multiple backend servers. It helps prevent any single server from becoming overwhelmed by traffic, thus improving performance and availability. Load balancers can operate at various layers of the OSI model:
+Layer 4 Load Balancing (Transport Layer): Distributes traffic based on network information, such as IP addresses and TCP/UDP ports.
+Layer 7 Load Balancing (Application Layer): Distributes traffic based on more detailed application-level information, such as HTTP headers or URL paths.
+The system we are building is an Application Layer load balancer software that relies on application-level information to model network traffic distribution.
+Reverse Proxy
+A reverse proxy acts as an intermediary between client and backend servers, forwarding client requests to the appropriate server and returning the server's response to the client. Reverse proxies help with traffic management, security, and performance optimization.
+Client
+Any application that makes requests to the reverse proxy through HTTP or HTTPS and expects a response is considered a client. This client maybe a benchmark software like JMeter, web browsers like Google Chrome, API clients like Postman, or CLI commands like curl. The client makes request to the reverse proxy which then forwards this request to the actual servers that handle this request and return the response to the reverse proxy. The reverse proxy then forwards the response back to the client.
+Replica
+As the system consists of multiple different kinds of servers, a distinction needs to be made. Moving forward, servers that serves the client requests that forwarded by the reverse proxy will be referred as replica. A replica is an instance of an application server that server user requests. A reverse proxy needs to have more than one replica available to perform load balancing.
+Admin Server
+The load balancer and reverse proxy also need to be monitored for their performance. To avoid using resources that are required by the load balancer, a different server is used to handle the task of providing information on the state of system. This admin server also receives requests forwarded by the reverse proxy that are meant for the admin server to handle. The admin server can provide a dashboard along with performance metrics of the load balancer.
+Probe
+A probe is a combination of two load signals that help determine the state of a replica. As the system uses the Prequal algorithm, it needs to store and maintain a list of probes that it uses to make decision on traffic distribution. We use two load signals – latency and requests-in-flight. This probe is obtained when the reverse proxy makes a probe request to the replica. The system then stores the load signals, the replica that responded as well as the receipt time for the probe.
+Asynchronous Probing
+As the load balancer relies on probes to determine traffic distribution, the system needs some way to obtain these probes. Synchronously obtaining these probes when a request enters the system will delay the service of the request itself, as well as slow the process. Instead, the system uses asynchronous probing where the system is continuously making probe request to the replica outside of the critical path of serving the requests. This means the probe request does not block the handling of actual requests.
+Hot-Cold Lexicographic
+The HCL is a method for classifying the probes into two categories based on their RIF value. A quantile parameter is configured in the system, that is used to get a quantile RIF value. Any probe with RIF exceeding this quantile RIF is labeled as hot and probes with less RIF than this value are considered cold. 
+2.2 LITERATURE REVIEW
+There are traditional load balancing algorithms like round-robin, least connections, and random selection that are implemented in most popular load balancing software. Simpler web applications still rely on these algorithms for balancing load and these algorithms perform well in systems that do not have complex traffic patterns.  Some of these algorithms are:
+Weighted Round-Robin: A regular round-robin cycles through servers in a fixed order, assigning each incoming request to the next server in line. A weighted Round-Robin algorithm implemented in NGINX and Envoy, however, also takes server weights into consideration when distributing requests, assigning more requests to servers with higher weights.
+Least connections: A least connection algorithm assigns request to server that is server with the least number of active connections, while also considering the server weights.
+IP hash: The server to which a request is sent is determined from the client IP address. In this case, either the first three octets of the IPv4 address or the whole IPv6 address are used to calculate the hash value.
+Random selection: The random selection algorithm selects a random available server. This is not very effective when a request’s load and latency is variable.
+Ring hash: The ring hash algorithm implements maps each server onto a circle by hashing its address. Then, on incoming request, some property of the request is hashed and finding the nearest corresponding host clockwise around the ring based on this hash value [1] [2].
+An area of research in load balancing aims to improve these algorithms by adapting them to use more information when making decisions. 
+Power of d choices with priority
+A study in improving the Power of d choices algorithm introduced priority to different types of requests received by the balancer based on their Service priority or Schedule priority. The outcome showed lower delays when handling priority requests compared to the original PodC algorithm [3]. 
+Median-Average Round Robin (MARR)
+An approach for improving Round-robin algorithm is the Median-Average Round Robin (MARR), which refines task scheduling by dynamically adjusting the time quantum. This algorithm uses a meta-heuristic approach and has shown better performance in reducing turnaround and waiting times compared to traditional RR methods [4].
+Latency-Aware Load Balancing
+Instead of attempting to improve traditional algorithms, there have been attempts to introduce modern techniques such as Machine Learning to load distribution. This includes a research by into traffic-aware load balancing, where algorithm considers the type of traffic (e.g., static content, dynamic queries) to optimize performance. This method contrasts with traditional algorithms, which typically treat all requests as equal in terms of resource requirements. The researchers showed that by dynamically categorizing traffic and routing it accordingly, they reduced processing delays and improved server utilization [5]. 
+ 
+3. SYSTEM ANALYSIS
+3.1 REQUIREMENT ANALYSIS
+3.1.1 FUNCTIONAL REQUIREMENTS
+ 
+Figure 1 Use Case diagram for Load Balancer
+ 
+Use Case Table:
+Use Case	Register
+Summary 	A new admin registers with the system.
+Actors	Admin
+Preconditions	The system is operational.
+Basic Sequence	1. Admin enters registration details.
+2. The system validates the data.
+3. If valid, the system stores the admin details.
+Exceptions	If details are invalid, the system returns validation errors.
+Post Conditions	A new admin is successfully registered in the system.
+
+Use Case	Login
+Summary 	The admin logs into the system to access features.
+Actors	Admin
+Preconditions	The admin is registered in the system and accesses the login page.
+Basic Sequence	1. Admin provides username and password.                                                          2. System checks for authorization.                                                  3. If authorized, the system logs admin into the system.
+Exceptions	Invalid username or password return an error message.
+Post Conditions	The admin is logged in and has access to authorized features.
+
+Use Case	View Dashboard
+Summary 	The admin views the system's dashboard.
+Actors	Admin
+Preconditions	Admin is logged in and authorized to view the dashboard.
+Basic Sequence	1. Admin views Dashboard.
+2. The system displays the server data.
+Exceptions	If admin is unauthorized, the system returns to login page.
+Post Conditions	The dashboard is displayed with relevant data.
+Use Case	Change Load Balancing Algorithm
+Summary 	The admin changes the algorithm used for load balancing.
+Actors	Admin
+Preconditions	Admin is logged in and authorized to modify settings.
+Basic Sequence	1. Admin selects a new load balancing algorithm.
+2. System updates the algorithm.
+3. New algorithm is applied to future requests.
+Exceptions	If an invalid algorithm is selected, the system returns an error.
+Post Conditions	The load balancing algorithm is updated.
+
+Use Case	Change Algorithm Parameters
+Summary 	The admin modifies parameters for the load balancing algorithm.
+Actors	Admin
+Preconditions	Admin is logged in and authorized to modify settings.
+Basic Sequence	1. Admin modifies the parameters of the algorithm.
+2. System updates the algorithm’s parameters.
+3. New parameters are applied to future requests.
+Exceptions	Invalid parameters return an error.
+Post Conditions	Algorithm parameters are updated.
+
+Use Case	Add Replica
+Summary 	The admin adds a new replica to the load balancer.
+Actors	Admin
+Preconditions	Admin is logged in and authorized.
+Basic Sequence	1. Admin selects the option to add a replica.
+2. System adds the replica to the pool and perform health check.
+3. The new replica is used in load balancing if health of the sever is in good condition.
+Exceptions	If the replica cannot be added, the system returns an error.
+Post Conditions	New replica is successfully added.
+
+Use Case	Remove Replica
+Summary 	The admin removes an existing replica from the system.
+Actors	Admin
+Preconditions	Admin is logged in and authorized.
+Basic Sequence	1. Admin selects the option to remove a replica.
+2. The system removes the replica from the list.
+3. Load balancer adjusts to the remaining replicas.
+Exceptions	If the replica cannot be removed, the system returns an error.
+Post Conditions	Replica is removed from the system.
+
+Use Case	Make a request
+Summary 	A user makes a request to the load balancer.
+Actors	Client
+Preconditions	The user is accessing the system, and the load balancer is operational.
+Basic Sequence	1. User sends a request.                                                                  2. Load balancer receives the request.                                            3. Load balancer matches the route and forwards the request to a replica.                                                   
+Exceptions	If the service is unavailable, the load balancer returns an error
+Post Conditions	The request is routed successfully, and a response is provided.
+ 
+Use Case	Send Response
+Summary 	A replica sends a response back for a request
+Actors	Replica
+Preconditions	The user has made a request to the system and the system forwarded the request to a replica.
+Basic Sequence	1. Replica sends a response.                                                                  2. Load balancer receives the response.                                            3. Load balancer matches the route and the client and forwards the response to the client.                                                   
+Exceptions	If the service or client is unavailable, the load balancer deletes the response.
+Post Conditions	The response is routed successfully to the client.
+
+3.1.2 NON-FUNCTIONAL REQUIREMENTS
+Scalability: Support seamless horizontal scaling by allowing the addition of backend replica without disrupting the system. This ensures the system can handle increasing traffic loads efficiently.
+Logging: Log all incoming requests and outgoing responses, providing detailed, real-time metrics to monitor traffic and diagnose issues.
+Performance: Ensure low latency in request forwarding and load balancing decisions to maintain optimal user experience. The system should handle high traffic volumes with minimal delay.
+Reliability: The system must be fault-tolerant, automatically redistributing traffic to healthy servers in case of failures. It should continue to function without interruption even when individual servers go offline.
+Security: Provide robust authentication and security features to protect against common threats like man-in-the-middle attacks, and unauthorized access.
+3.2 FEASIBILITY ANALYSIS
+3.2.1 TECHNICAL FEASIBILITY
+The technical aspect of the proposed system can be divided into three parts: the main component is the reverse proxy server that is responsible for redirecting client requests between server replicas, the front-end dashboard we use to monitor the server’s performance and manage server replicas, and finally the load balancing algorithm that the proxy server uses to make designs on how load is distributed. Another small but important component is the probing service used to collect data on the server replicas that the load balancer uses to make decisions. For programming language, we will be using the Go Language to build the reverse proxy server, the load balancing component, and the probing service. The metrics and performance dashboard will be built using the React Library and PostgreSQL to store user data and other long-term information.
+3.2.2 OPERATIONAL FEASIBILITY
+The proposed system is easily adapted into existing distributed systems requiring minimal changes on existing infrastructure. The proposed system is intended to replace the functions of any existing reverse proxy server. The proposed system has a small footprint in terms of CPU load and storage. The probing service can result in slight increase in CPU load of server replicas, but the performance gained from using the proposed load balancing algorithm easily offsets this cost. The memory load can increase slightly if the system is configured to store metrics in a database for later analysis, but this is within acceptable range considering the benefits of storing this data.
+3.2.3 ECONOMIC FEASIBILITY
+The proposed system is a web server that does not require any special hardware to operate. It can run on any hardware that supports running existing reverse proxy servers such as Nginx. The reverse proxy server and probing service use less than 300MB RAM on idle, and may need up to 2GB of RAM based with higher requirements as the number of server replicas being balanced increases. The proposed reverse proxy server requires at least a dual core CPU to handle the request forwarding and probing tasks in parallel. The cost of the infrastructure that the proposed system is used in is a separate calculation than the cost of running the proposed system.
+3.2.4 SCHEDULE FEASIBILITY
+The proposed system is going to be built using the agile methodology. The reason for choosing Agile to develop the system is that the different modules in the proposed system can be developed in parallel and incrementally to quickly reach a minimum usable state in the first sprint cycle. Then we can complete the algorithm in the second cycle, and finally finish the management module and refinement in the last cycle.
+ 
+Figure 2 Gantt Chart Breaking Down Project Life Cycle
+3.3 ANALYSIS
+3.3.1 DATA MODELING WITH ENTITY RELATIONSHIP DIAGRAM
+ 
+Figure 3 Entity Relationship Diagram of the Load Balancer
+3.3.2 PROCESS MODELING USING DATA FLOW DIAGRAM
+ 
+Figure 4 Context Diagram of the Load Balancer
+3.3.3 LEVEL 1: DATA FLOW DIAGRAM OF THE ENTIRE SYSTEM
+ 
+Figure 5 Level 1: Data Flow Diagram of the entire system
+3.3.4 LEVEL 2: DATA FLOW DIAGRAM OF ADMIN SERVICE
+ 
+Figure 6 Level 2: Data Flow Diagram of Admin Service
+3.3.5 LEVEL 2: DATA FLOW DIAGRAM OF LOAD BALANCER SERVICE
+ 
+Figure 7 Level 2: Data Flow Diagram of Load Balancer Service
+3.3.6 LEVEL 2: DATA FLOW DIAGRAM OF PROBE SERVICE
+ 
+Figure 8 Level 2: Data Flow Diagram of Probe Service
+3.3.7 LEVEL 2: DATA FLOW DIAGRAM OF REVERSE PROXY SERVICE
+ 
+Figure 9 Level 2: Data Flow Diagram of Reverse Proxy Service
+ 
+4. SYSTEM DESIGN
+When designing the system, a structured approach was chosen, dividing the different components into sub-systems, the sub-systems are a collection of modules and interactions, and the modules are a collection of related functionalities. The different sub-systems communicate through the provided interface in the form of API.
+4.1 DESIGN
+4.1.1 SYSTEM ARCHITECTURE
+ 
+Figure 10 System Architecture
+1.	The load balancer has access to the admin database for persistent data and maintains a list of probes in a probe pool. The load balancer is asynchronously making probe requests to several replicas chosen at random at specific intervals and storing these probes in the probe pool. The probes are removed from the probe pool after use or after a certain duration. SSL encryption and Error handling when a replica fails is also handled at the load balancer.
+2.	When a client makes a request to the load balancer uses the probes available in the probe pool to choose a replica to receive this request. The request is then forwarded to the replica. Once the replica returns a response, this response is forwarded to the asking client.
+The admin server is another server that provides authentication and access information related to the load balancer through a dashboard. The load balancer can classify whether the request needs to be handled by a replica or by the admin server based on the URL path and forwards them to the correct destination.
+4.1.2 SCHEMA DIAGRAM 
+Figure 11 Schema Diagram of Load Balancer
+
+4.1.3 DATA DICTIONARY DESIGN
+ 
+Figure 12 Data Dictionary for the System
+4.1.4 FLOWCHART OF THE WORKING MECHANISM
+ 
+Figure 13 Flowchart showing working mechanism of the Reverse Proxy
+4.1.5 FLOWCHART OF THE REPLICA HEALTH-CHECK PROCESS
+ 
+Figure 14 Flowchart showing replica health-check process
+4.2 ALGORITHM DETAILS
+4.2.1 POWER OF D CHOICES WITH REPLICA SELECTION USING HOT-COLD LEXICOGRAPHIC (HCL)
+1. Define ‘N’, the number of replicas.
+2. The load signal which is obtained from probing server replica consists of latency of a request and requests in-flight (RIF).
+3. When a request arrives, make a certain number of probe requests determined by the constant probe factor.
+4. After a certain duration, remove probes from the pool based on probe age, and the constant reuse factor.
+4. Use the Hot-Cold Lexicographic (HCL) to select the optimal server for forwarding the request:
+a. The HCL algorithm works by using the load signals to distribute the available probes into two lists – hot and cold replica.
+b. We define a quantile QRIF which is used to mark a replica as either hot or cold. QRIF ε [0.6, 0.9] is a good quantile for marking hold and cold replicas.  For this example, we will select a QRIF of 0.7.
+c. Calculate the quantile for the list of probes as:
+𝑄 = ⌈0.7 ∙ 𝑑 ⌉
+d. If RIFi > RIFQ, it is considered hot, otherwise the replica is considered cold. Otherwise, the replica is considered hot.
+e. If there are no cold replicas, then the replica with the lowest RIF is forwarded the request.
+f. When there are multiple cold replicas, the replica with the lowest latency is chosen.
+g. In case, there are no probes, we choose a random replica from the pool of ‘d’ choices.
+h. If there are less than two probes in the pool, randomly select a replica from all the available replicas.
+ 
+5. IMPLEMENTATION AND TESTING
+5.1 IMPLEMENTATION
+5.1.1 TOOLS USED
+      The following tools and technologies were utilized for the implementation of this project:
+1.	Visual Studio Code: It is IDE which is used for writing and debugging code for both frontend and backend. It supports extensions for Go, TypeScript, ReactJS, Docker and version control integration.
+2.	Web Browser Dev Tool: Web developer tools are employed to inspect API calls, debug JavaScript/TypeScript, and verify correct data rendering and network traffic between the front end and backend.
+3.	Vite: Vite is used as the development build tool, offering fast development server startup times and efficient hot-module replacement (HMR), allowing for rapid iterations on the front-end UI during development.
+4.	Docker: Docker is used to containerize both the front-end and back-end services, ensuring consistent environments across development and production. This aids in the deployment of the load balancing system, making it portable and scalable.
+5.	Git: Git is used for version control, allowing for efficient collaboration, tracking changes, and maintaining a clean history of development. It ensures that all updates, whether in the front-end (ReactJS/TypeScript), backend (Go), or infrastructure (Docker/PostgreSQL configurations), are properly managed, reviewed, and deployed.
+6.	React and Typescript: The front end of the dynamic load balancing system is built with ReactJS, using TypeScript for type safety and improved developer experience. This provides a strongly typed interface for the dashboard, where users can view server load statistics, manage replicas, and monitor server health in real time.
+7.	Go: The core modules of the load balancer are implemented in Go. This includes the back-end services such as reverse proxy, authentication and Power of D Choices algorithm with Replica Selection using Hot-Cold Lexicographic algorithm. Go's concurrency model allows for use of available system resources and running services in parallel.
+8.	PostgreSQL: The system uses PostgreSQL as the backend database. It stores data about the users and other configuration parameters.
+9.	Postman: Postman is used for testing and interacting with the APIs exposed by the Go backend, ensuring the correct data flow and behavior of the load balancer.
+10.	Apache Benchmark: Apache Benchmark is used to load test the system by simulating concurrent requests to the server. This helps measure how well the load balancer distributes requests and performs under heavy traffic, highlighting potential bottlenecks and providing feedback for further optimization.
+5.1.2 IMPLEMENTATION DETAIL
+Authentication Middleware
+The authentication middleware is a critical component that secures routes in the application        by validating user credentials before allowing access to protected resources. The middleware performs the following steps:
+1.	Token Extraction: Upon receiving a request, the middleware checks for the presence of a JWT (JSON Web Token) in the request headers or cookies. If no token is found, the middleware returns a 401 Unauthorized response.
+2.	Token Validation: If a token is present, the middleware decodes and validates it using a predefined secret key. During this process, the middleware checks:
+2.1 Expiration: Whether the token has expired. If expired, a 401 Unauthorized          response is returned.
+2.2 Claims Extraction: If valid, the middleware extracts user claims, such as the username or user ID, from the token.
+3.	Context Setting: After successfully validating the token, the middleware sets the extracted claims in the request context. This allows subsequent handlers to access user information without needing to re-validate the token.
+4.	Next Handler Invocation: Finally, the middleware calls the next handler in the chain, allowing the request to proceed if authentication is successful.
+Registration Process
+The user registration process involves several validations to ensure the integrity and security of the data being stored. The steps include:
+1.	Data Reception: The registration handler receives the user’s details, including username, email, and password from the request body.
+2.	Input Validation:
+2.1 Format Checking: The application verifies that the email is in a valid format and that the password meets complexity requirements.
+2.2 Uniqueness Check: Before proceeding, the handler queries the database to check if the provided username and email already exists. If so, an appropriate error message is returned to the user.
+3.	Password Hashing: If the input is valid and unique, the password is hashed using a secure hashing algorithm before storing it in the database. This ensures that the password is not stored in plain text, enhancing security.
+4.	Database Insertion: The handler inserts the new user record into the database along with the current timestamp. If the insertion is successful, a success message is returned.
+Login Process
+The login process authenticates users by verifying their credentials against stored data in the database. The steps involved are:
+1.	Data Reception: The login handler receives the user’s login credentials i.e username and password, from the request body.
+2.	User Retrieval: The handler queries the database to retrieve the user record associated with the provided username. If no user is found, a message indicating invalid credentials is returned.
+3.	Password Verification: If a user is found, the application verifies the provided password against the stored hashed password using a secure comparison function.
+2.1	Success: If the password matches, a JWT is generated for the user.This token is sent back to the user, often as a cookie, allowing them to authenticate subsequent requests.
+2.2	 Failure: If the password does not match, an error message is returned to indicate invalid credentials.
+Load Balancing Process
+The reverse proxy handles requests and forwards them to the appropriate destination server. The steps involved are as follows:
+1.	Request Reception: The reverse proxy handler receives an HTTP request from the client. The request includes details such as the method, URL, headers, and body.
+
+2.	Input Validation:
+2.1	Format Checking: The proxy verifies that the incoming request is well-formed and that all required headers are present.
+
+2.2	Routing Check: The proxy determines the appropriate backend server based on the requested URL, headers, or predefined routing rules. If no matching backend is found, an error response is returned.
+
+3.	Forwarding the Request: The reverse proxy forwards the validated request to the backend replica selected by the load balancing algorithm.
+
+4.	Response Handling: Upon receiving a response from the replica, the proxy checks for any errors. If the response is valid, it passes the response back to the client. If an error occurred, a new replica receives the same request. If an error occurs in the retry, the error is returned to the client.
+5.2 TESTING
+5.2.1 UNIT TEST
+The purpose of unit test is to validate that the different functions in a module are behaving according to the specification.
+Table 1 Test case for Reverse Proxy Module
+S.N.	Test Case	Expected Outcome	Actual Outcome	Status
+1.	A valid URL is provided to the reverse proxy.	The reverse proxy should forward the request to the URL.	The reverse proxy forwards the request to the URL.	Passed
+2.	An invalid URL is provided to the reverse proxy.	The reverse proxy should return an invalid URL error.	The reverse proxy returns a invalid URL error.	Passed
+3.	A URL for a replica that is not running is provided.	The reverse proxy should return a TCP connection refused error.	The reverse proxy returns a TCP connection refused error.	Passed
+4.	A URL for a running replica is provided.	The reverse proxy should make a request to the URL and receive a response.	The reverse proxy makes a request to the URL and receives a response.	
+Table 2 Test case for Probing Module
+S.N.	Test Case	Expected Outcome	Actual Outcome	Status
+1.	A probe request is sent to a running replica.	The response from the replica should be stored in the probe pool.	The response from the replica is stored in the probe pool.	Passed
+2.	A probe request is sent to a replica that is down.	The replica should be removed from the list and the probe pool should be cleared.	The replica is removed from the list and the probe pool is cleared.	Passed
+3.	A probe has been in the probe pool for a certain duration.	The probe should be removed from the probe pool.	The probe is removed from the probe pool.	Passed
+4.	A probe has been used several times.	The probe should be removed from the probe pool.	The probe is removed from the probe pool.	Passed
+
+ 
+Table 3 Test case for Prequal Algorithm Module
+S.N.	Test Case	Expected Outcome	Actual Outcome	Status
+1.	A request arrives and the probe pool is empty.	The request should be forwarded to a randomly selected replica.	The request is forwarded to a randomly selected replica. 	Passed
+2.	A request arrives and there are less than two replicas in the load balancer.	The request should be forwarded to a randomly chosen replica.	The request is forwarded to a randomly chosen replica.	Passed
+3.	A request arrives and there is more than 1 cold replica.	The request should be forwarded to the replica with lower latency.	The request is forwarded to the replica with lowest latency.	Passed
+4.	A request arrives and there is only one cold replica.	The request should be forwarded to the cold replica.	The request is forwarded to the cold replica.	Passed
+5.	A request arrives and there is no cold replica available.	The request should be forwarded to a hot replica with the lowest RIF.	The request is forwarded to the hot replica with lowest RIF.	Passed
+
+
+5.2.2 TEST CASE FOR SYSTEM TESTING
+Table 4 Test case for User Registration
+S.NO	Test Case	Expected Outcome	Actual Outcome	Result
+1	User registration with valid details	User should be successfully registered, and should be redirected to login page	User is successfully registered, and is redirected to login page	Passed
+2	User registration with invalid email format	User should see a message indicating the email format is invalid	User sees a message indicating the email format is invalid	Passed
+3	User registration with already registered username or email	User should see a message indicating the user already exists	User sees a message indicating the user already exists	Passed
+4	User registration with missing fields	User should see a message indicating that all fields are required.	User sees a message indicating that all fields are required.	Passed
+5	Password validation during registration	User should submit password with at least 1 capital, one symbol and at least 8 characters	User submits password with at least 1 capital, one symbol and at least 8 characters	Passed
+
+Table 2 Test case for Login
+S.NO	Test Case	Expected Outcome	Actual Outcome	Result
+1	User logs in with correct username and password	User should successfully be logged in and should be redirected to the dashboard.	User is successfully logs in and is redirected to the dashboard.	Passed
+2	User logs in with incorrect username or password	User should see a message indicating invalid credentials.	User sees a message indicating invalid credentials.	Passed
+3	User attempts to visit the dashboard without logging in	User should be redirected to the login page with a prompt to log in.	User is redirected to the login page with a prompt to log in.	Passed
+4	User visits the dashboard after logging in	User should successfully access the dashboard.	User successfully accesses the dashboard.	Passed
+5	User attempts to register with already registered email	User should see message indicating that the email is already in use.	User sees a message indicating that the email is already in use.	Passed
+
+
+
+5.3 RESULT ANALYSIS
+The result of this project is a load balancer and reverse proxy system that can be used in a web application that follows a distributed or microservices architecture to balance traffic between the different replicas of the same microservice. For a comparison of its performance against traditional algorithms, Round-robin and Power of d choice, a test system is setup. 
+The test setup consists of 4 replicas of the same server written in Go, with two routes – ping and test. The ping route returns a response with the load signals required by our prequal algorithm. The test route on the other hand waits between 500 to 2000 millisecond to simulate a database query before returning a text response.
+We used Apache Benchmark to make 10000 requests in a batch of 1000 requests and obtained the following results
+Table 5 Comparison of Round-Robin and Prequal algorithm
+	PREQUAL	Round-Robin
+Total time taken	4.19 seconds	4.43 seconds
+Requests per second (mean)	2410.98 #/sec	2252.86 #/sec
+Time per request (mean)	414.77ms	443.880 ms
+ 
+6. CONCLUSION
+6.1 PROGRESS
+The reverse proxy that forwards the request and response from client and replica respectively that arrive in the system is completed. The registration and login of admin users into the admin server with proper validation and data sanitation before entering the database is completed. The homepage, login and registration pages and their integration with the corresponding back-end functionality is also finished alongside the proper flow of events in the webpage.
+6.2 ONGOING
+The process of integrating the load balancer and admin server is a work in progress. After the integration of load balancer, the admin server can view the statistics that are stored by the load balancer related to the replica and the request handling process.
+6.3 REMAINING
+The remaining work includes determining and storing the statistics that the admin of the system would be interested in viewing, creating handlers for admin functionality such as adding and removing replica, changing configuration, and allowing admin to start a health-check. 
+REFERENCES
+
+[1] 	"HTTP Load Balancing," F5, Inc., [Online]. Available: https://docs.nginx.com/nginx/admin-guide/load-balancer/http-load-balancer/. [Accessed 7 8 2024].
+[2] 	E. P. Authors, "Supported load balancers," Envoy Project, [Online]. Available: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/upstream/load_balancing/load_balancers. [Accessed 6 8 2024].
+[3] 	N. Jianyu, W. Chunpu, F. Chen and X. Hong, "When Power-of-d-Choices Meets Priority,," IEEE/ACM 30th International Symposium on Quality of Service (IWQoS), pp. 1-10, 2022. 
+[4] 	Z. M.F, F. F and K. MS, "An enhanced round robin using dynamic time quantum for real-time asymmetric burst length processes in cloud computing environment," PLoS ONE, vol. 19, no. 8, pp. 1-18, 2024. 
+[5] 	J. C. Y. S. S. J. Z. L. X. Chen, "Dynamic Task Offloading in Edge Computing Based on Dependency-Aware Reinforcement Learning," IEEE Transactions on Cloud Computing, vol. 12, no. 2, pp. 594-608, 2024. 
+[6] 	L. Wang, "Low-Latency, High-Throughput Load Balancing," Journal of Computer Technology & Applied Mathematics, vol. 1, no. 2, pp. 1-9, 2024. 
+[7] 	B. Wydrowski, R. Kleinberg, S. M. Rumble and A. Archer, "21st USENIX Symposium on Networked Systems Design and Implementation," in USENIX, Santa Carla, CA, 95054, USA, 2024. 
+[8] 	"Does Page Load Time Really Affect Bounce Rate?," 18 January 2018. [Online]. Available: https://www.pingdom.com/blog/page-load-time-really-affect-bounce-rate/. [Accessed 4 August 2024].
+
+
+ 
+APPENDICES
+SCREENSHOTS
+Homepage
+ 
+
+Login Form
+ 
+Register Form
+ 
+Dashboard
+ 
+
+SOURCE CODE
+Probing to Reduce Latency and Queuing Algorithm Implementation
+package algorithm
+
+import (
+	"math/rand/v2"
+	"net/url"
+	"sort"
+	"time"
+
+	"github.com/ra-shree/prequal-server/pkg/common"
+)
+
+type UpstreamDecisionQueueItem struct {
+	destination *url.URL
+	insertTime  time.Time
+}
+
+var UpstreamDecisionQueue []UpstreamDecisionQueueItem
+var queueSize = 0
+
+// needed to partition into hot and cold probes
+var hot_cold_quantile float64 = 0.6
+
+func Enqueue(item *url.URL) {
+	UpstreamDecisionQueue = append(UpstreamDecisionQueue, UpstreamDecisionQueueItem{
+		destination: item,
+		insertTime:  time.Now(),
+	})
+	queueSize++
+}
+
+func DeQueue() UpstreamDecisionQueueItem {
+	item := UpstreamDecisionQueue[0]
+	UpstreamDecisionQueue = UpstreamDecisionQueue[1:]
+	queueSize--
+
+	return item
+}
+
+func EmptyQueue() {
+	UpstreamDecisionQueue = make([]UpstreamDecisionQueueItem, 0, 10)
+}
+
+func ProbeToReduceLatencyAndQueuingAlgorithm(r *common.Replica) {
+	probes := common.ProbeQueue.Probes
+	numberOfProbes := common.ProbeQueue.Size
+
+	if len(r.Upstreams) == 1 {
+		Enqueue(r.Upstreams[0])
+		return
+	}
+
+	if numberOfProbes == 2 {
+		Enqueue(r.Upstreams[rand.IntN(2)])
+		return
+	}
+
+	sort.Slice(probes, func(i, j int) bool {
+		return probes[i].RequestsInFlight < probes[j].RequestsInFlight
+	})
+
+	partiton_index := int(hot_cold_quantile * float64(numberOfProbes-1))
+
+	if partiton_index == numberOfProbes-1 {
+		lowestLatencyIndex := 0
+		for i := 0; i < numberOfProbes; i++ {
+			if probes[i].Latency < probes[lowestLatencyIndex].Latency {
+				lowestLatencyIndex = i
+			}
+		}
+		Enqueue(probes[lowestLatencyIndex].Upstream)
+		return
+	}
+
+	minRIFIndex := 0
+	for i := 0; i < partiton_index; i++ {
+		if probes[i].RequestsInFlight < probes[minRIFIndex].RequestsInFlight {
+			minRIFIndex = i
+		}
+	}
+	Enqueue(probes[minRIFIndex].Upstream)
+}
+
+func ProbingToReduceLatencyAndQueuing(r *common.Replica) *url.URL {
+	ProbeToReduceLatencyAndQueuingAlgorithm(r)
+
+	return DeQueue().destination
+}
+
+Asynchronous Probing Algorithm
+package common
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"math/rand/v2"
+	"net/http"
+	"net/url"
+	"os"
+	"sync"
+	"time"
+)
+
+var maxLifeTime time.Duration = 5 * time.Second
+var poolSize = 16
+var probeFactor = 0.5
+var probeRemoveFactor = 1
+var totalReplica = 1
+var mu = 1
+
+var denom = (1-poolSize/totalReplica)*int(probeFactor) - probeRemoveFactor
+var reuseRate = max(1, ((1 + mu) / denom))
+
+var ProbeQueue = NewServerProbeQueue()
+
+type ServerProbe struct {
+	Name             string
+	RequestsInFlight int
+	Latency          int
+	Upstream         *url.URL
+}
+
+type ServerProbeItem struct {
+	used        int
+	ReceiptTime time.Time
+	ServerProbe
+}
+
+type ServerProbeQueue struct {
+	Probes   []ServerProbeItem
+	Start    int
+	End      int
+	Size     int
+	Capacity int
+	mutex    sync.Mutex
+}
+
+type ProbeResponse struct {
+	ServerName       string `json:"serverName"`
+	RequestsInFlight uint64 `json:"requestInFlight"`
+	Latency          uint64 `json:"latency"`
+}
+
+func NewServerProbe(s *ProbeResponse, u *url.URL) *ServerProbe {
+	return &ServerProbe{
+		Name:             s.ServerName,
+		RequestsInFlight: int(s.RequestsInFlight),
+		Latency:          int(s.Latency),
+		Upstream:         u,
+	}
+}
+
+func NewServerProbeItem(s *ServerProbe) *ServerProbeItem {
+	return &ServerProbeItem{
+		ServerProbe: *s,
+		used:        0,
+		ReceiptTime: time.Now(),
+	}
+}
+
+func NewServerProbeQueue() *ServerProbeQueue {
+	return &ServerProbeQueue{
+		Start:    0,
+		End:      0,
+		Size:     0,
+		Capacity: poolSize,
+		Probes:   make([]ServerProbeItem, 0, 16),
+	}
+}
+
+func (q *ServerProbeQueue) ProbesInQueue() []ServerProbeItem {
+	return q.Probes
+}
+
+func (q *ServerProbeQueue) Add(probe *ServerProbe) {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	fmt.Printf("\n\nAdded a probe, current size %d, capacity %d\n\n", q.Size, q.Capacity)
+	if q.Size == q.Capacity {
+		q.Probes[q.Start] = *NewServerProbeItem(probe)
+		q.Start = (q.Start + 1) % q.Capacity
+	} else {
+		q.Probes = append(q.Probes, *NewServerProbeItem(probe))
+		q.Size++
+	}
+
+	// Always move End forward
+	q.End = (q.End + 1) % q.Capacity
+}
+
+func (q *ServerProbeQueue) Remove(index int) bool {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	if q.Size == 0 || index < 0 || index >= q.Size {
+		return false
+	}
+
+	actualIndex := (q.Start + index) % q.Capacity
+
+	newProbeList := append(q.Probes[:actualIndex], q.Probes[actualIndex+1:]...)
+	q.Probes = newProbeList
+	q.End = (q.End - 1 + q.Capacity) % q.Capacity
+	q.Size--
+
+	return true
+}
+
+func (q *ServerProbeQueue) RemoveOldest() bool {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	if q.Size == 0 {
+		return false
+	}
+
+	q.Start = (q.Start + 1) % q.Capacity
+	q.Size--
+
+	return true
+}
+
+func (q *ServerProbeQueue) RemoveProbes() bool {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	if q.Size == 0 {
+		return false
+	}
+
+	removed := 0
+	newProbeList := make([]ServerProbeItem, 0, q.Capacity)
+
+	for i := 0; i < q.Size; i++ {
+		index := (q.Start + i) % q.Capacity
+		probe := q.Probes[index]
+
+		// Skip probes that are still valid (i.e., keep them in the queue)
+		if time.Since(probe.ReceiptTime) < maxLifeTime && probe.used < reuseRate {
+			newProbeList = append(newProbeList, probe)
+			continue
+		}
+		removed++
+	}
+
+	// Adjust the queue based on the elements kept
+	q.Probes = newProbeList
+	q.Size -= removed
+	q.Start = 0
+	q.End = q.Size % q.Capacity
+
+	return true
+}
+
+func getProbe(url *url.URL) (*ServerProbe, error) {
+	res, err := http.Get(fmt.Sprintf("%s://%s/%s", url.Scheme, url.Host, "ping"))
+	if err != nil {
+		log.Printf("error making get request %v", err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		log.Printf("received non-200 response: %d", res.StatusCode)
+	}
+
+	body, err := io.ReadAll(res.Body)
+
+	if err != nil {
+		log.Printf("error reading response body %v", err)
+	}
+
+	var probeRes ProbeResponse
+
+	err = json.Unmarshal([]byte(body), &probeRes)
+	if err != nil {
+		log.Printf("error parsing JSON: %v", err)
+	}
+
+	err = os.WriteFile("probe.log", body, 0644)
+	if err != nil {
+		log.Printf("error writing JSON to file: %v", err)
+	}
+
+	fmt.Printf("\n\nResponse JSON:::::::: \n %v %v %v", probeRes.ServerName, probeRes.RequestsInFlight, probeRes.Latency)
+
+	newProbe := NewServerProbe(&probeRes, url)
+	return newProbe, nil
+}
+
+func ProbeService(w http.ResponseWriter, r *http.Request, replicas []*Replica) {
+	probeRate := randomRound(probeFactor)
+
+	numUpstreams := len(replicas[0].Upstreams)
+	perm := rand.Perm(numUpstreams)
+
+	for i := 0; i < probeRate; i++ {
+		newProbe, err := getProbe(replicas[0].Upstreams[perm[i]])
+		if err != nil {
+			fmt.Printf("error when getting probe %v", err)
+			continue
+		}
+		ProbeQueue.Add(newProbe)
+	}
+}
+
+func PeriodicProbeService(t time.Time, replicas []*Replica) {
+	// fmt.Printf("\nPeriodic Probe Request: %v\n", t)
+	probeRate := 3
+
+	numUpstreams := len(replicas[0].Upstreams)
+	perm := rand.Perm(numUpstreams)
+
+	for i := 0; i < probeRate; i++ {
+		newProbe, err := getProbe(replicas[0].Upstreams[perm[i]])
+		if err != nil {
+			fmt.Printf("error when getting probe %v", err)
+			continue
+		}
+		ProbeQueue.Add(newProbe)
+	}
+}
+
+func ProbeCleanService(t time.Time) {
+	 fmt.Printf("\nCleaning Probe Queue: %v\n", t)
+	ProbeQueue.RemoveProbes()
+}
+
+User Authentication Middleware
+package middleware
+
+import (
+	"context"
+	"net/http"
+
+	"github.com/ra-shree/prequal-server/utils"
+)
+
+func AuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cookie, err := r.Cookie("token")
+		if err != nil {
+			if err == http.ErrNoCookie {
+				utils.NewErrorResponse(w, http.StatusUnauthorized, []string{"Unauthorized"})
+				return
+			}
+			utils.NewErrorResponse(w, http.StatusBadRequest, []string{"Bad request"})
+			return
+		}
+
+		claims, err := utils.ValidateJWT(cookie.Value)
+		if err != nil {
+			utils.NewErrorResponse(w, http.StatusUnauthorized, []string{"Unauthorized"})
+			return
+		}
+
+		// Set the username in the context
+		ctx := context.WithValue(r.Context(), "username", claims.Username)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+User Login and Registration
+package handlers
+
+import (
+	"database/sql"
+	"encoding/json"
+	"net/http"
+	"regexp"
+	"sync"
+	"time"
+	"unicode"
+
+	"github.com/ra-shree/prequal-server/pkg/db"
+	"github.com/ra-shree/prequal-server/utils"
+)
+
+var (
+	users  = make(map[string]db.User)
+	usersMutex   sync.Mutex
+	emailRegex   = regexp.MustCompile(`^[a-z0-9._+-]+@[a-z0-9.-]+\.[a-z]{2,}$`)
+	psymbolRegex = regexp.MustCompile(`[!@#$%^&*(),.?":{}|<>]`)
+)
+
+func AuthRegister(w http.ResponseWriter, r *http.Request) {
+	var user db.User
+	var validationErrors []string
+
+	err := json.NewDecoder(r.Body).Decode(&user)
+	if err != nil {
+		validationErrors = append(validationErrors, "Invalid request payload")
+		utils.NewErrorResponse(w, http.StatusBadRequest, validationErrors)
+		return
+	}
+
+	// Validate username's length
+	if len(user.Username) < 3 || len(user.Username) >32 {
+		validationErrors = append(validationErrors, "Username must be at least 3-32 characters long")
+	}
+
+	// Validate email format
+	if !emailRegex.MatchString(user.Email) {
+		validationErrors = append(validationErrors, "Invalid email format")
+	}
+
+	// Validate password 
+	if len(user.Password) < 8 || len(user.Password) > 32 {
+		validationErrors = append(validationErrors, "Password must be at least 8 characters long")
+	}
+
+
+	if !containsCapitalLetter(user.Password) {
+		validationErrors = append(validationErrors, "Password must contain at least one capital letter")	
+	}
+
+	if !containsSymbol(user.Password) {
+	     validationErrors = append(validationErrors, "Password must contain at least one symbol")	
+	}
+		
+	// Check for errors
+	if len(validationErrors) > 0 {
+		utils.NewErrorResponse(w, http.StatusBadRequest, validationErrors)
+		return
+	}
+
+	// Check if user already exists
+	if _, exists := users[user.Username]; exists {
+		validationErrors = append(validationErrors, "User already exists")
+		utils.NewErrorResponse(w, http.StatusConflict, validationErrors)
+		return
+	}
+
+	// Hash the password
+	hashedPassword, err := utils.HashPassword(user.Password)
+	if err != nil {
+		utils.NewErrorResponse(w, http.StatusInternalServerError, []string{"Error hashing password"})
+		return
+	}
+
+	// Save user with hashed password
+	user.Password = hashedPassword
+
+
+	// Insert the user into the database
+	if err := db.InsertUser(user); err != nil {
+		utils.NewErrorResponse(w, http.StatusInternalServerError, []string{"Error inserting user into the database"})
+		return
+	}
+
+	utils.NewSuccessResponse(w, "User registered successfully")
+}
+
+func AuthLogin(w http.ResponseWriter, r *http.Request) {
+    var creds db.Credentials
+    var validationErrors []string
+
+    err := json.NewDecoder(r.Body).Decode(&creds)
+    if err != nil {
+        validationErrors = append(validationErrors, "Invalid request payload")
+        utils.NewErrorResponse(w, http.StatusBadRequest, validationErrors)
+        return
+    }
+
+    // Retrieve user from the database
+    var user db.User
+    err = db.GetUserByUsername(creds.Username, &user) 
+    if err != nil {
+        if err == sql.ErrNoRows {
+            validationErrors = append(validationErrors, "Invalid credentials")
+            utils.NewErrorResponse(w, http.StatusUnauthorized, validationErrors)
+            return
+        }
+        utils.NewErrorResponse(w, http.StatusInternalServerError, []string{"Error fetching user"})
+        return
+    }
+
+
+
+    // Validate password
+    if !utils.CheckPasswordHash(creds.Password, user.Password) {
+        validationErrors = append(validationErrors, "Invalid credentials")
+        utils.NewErrorResponse(w, http.StatusUnauthorized, validationErrors)
+        return
+    }
+
+    // Generate JWT token
+    tokenString, err := utils.GenerateJWT(creds.Username)
+    if err != nil {
+        utils.NewErrorResponse(w, http.StatusInternalServerError, []string{"Error generating token"})
+        return
+    }
+
+    // Set JWT as a cookie
+    http.SetCookie(w, &http.Cookie{
+        Name:     "token",
+        Value:    tokenString,
+        HttpOnly: true,
+    })
+
+    // Send success response
+    utils.NewSuccessResponse(w, "Login successful")
+}
+

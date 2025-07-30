@@ -20,6 +20,21 @@ const userSchema = new mongoose.Schema({
     enum: ["male", "female", "other"],
     lowercase: true,
   },
+  age: {
+    type: Number,
+    min: [0, "Age cannot be negative"],
+    max: [120, "Age seems unrealistic"],
+  },
+  phone: {
+    type: String,
+    trim: true,
+    maxlength: [20, "Phone number cannot exceed 20 characters"],
+  },
+  address: {
+    type: String,
+    trim: true,
+    maxlength: [200, "Address cannot exceed 200 characters"],
+  },
   email: {
     type: String,
     required: [true, "Email is required"],
@@ -46,12 +61,23 @@ const userSchema = new mongoose.Schema({
   emailVerificationExpires: {
     type: Date,
   },
+  resetPasswordToken: {
+    type: String,
+  },
+  resetPasswordExpires: {
+    type: Date,
+  },
   createdAt: {
     type: Date,
     default: Date.now,
   },
   lastLogin: {
     type: Date,
+  },
+  role: {
+    type: String,
+    enum: ["user", "admin"],
+    default: "user",
   },
 });
 

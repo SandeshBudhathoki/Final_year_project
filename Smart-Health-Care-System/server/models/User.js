@@ -76,8 +76,15 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ["user", "admin"],
+    enum: ["user", "admin", "doctor"],
     default: "user",
+  },
+  doctorId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Doctor",
+    required: function() {
+      return this.role === "doctor";
+    }
   },
 });
 

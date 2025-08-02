@@ -20,6 +20,7 @@ import Predict from "./pages/Predict.jsx";
 import History from "./pages/History.jsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
 import AdminPanel from "./pages/AdminPanel";
+import DoctorPanel from "./pages/DoctorPanel.jsx";
 import Profile from "./pages/Profile.jsx";
 import DoctorList from "./pages/DoctorList.jsx";
 import DoctorProfile from "./pages/DoctorProfile.jsx";
@@ -74,6 +75,7 @@ function AppContent() {
           <Route path="/appointments" element={<Appointments />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/admin" element={<AdminPanel />} />
+          <Route path="/doctor" element={<DoctorPanel />} />
         </Routes>
       </main>
       <ToastContainer

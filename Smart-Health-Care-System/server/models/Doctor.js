@@ -17,11 +17,28 @@ const doctorSchema = new mongoose.Schema({
   availableSlots: [slotSchema],
   photo: { type: String },
   contactInfo: { type: String },
+  // New availability management fields
+  availabilityStatus: {
+    type: String,
+    enum: ["available", "busy", "offline", "booked"],
+    default: "available"
+  },
+  lastStatusUpdate: { type: Date, default: Date.now },
+  currentPatientId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  statusNotes: { type: String }, // Optional notes about current status
   slotDurations: {
     routine: { type: Number, default: 15 },
     newDiagnosis: { type: Number, default: 30 },
     emergency: { type: Number, default: 45 }
   }
+});
+
+// Update lastStatusUpdate when availabilityStatus changes
+doctorSchema.pre('save', function(next) {
+  if (this.isModified('availabilityStatus')) {
+    this.lastStatusUpdate = new Date();
+  }
+  next();
 });
 
 module.exports = mongoose.model("Doctor", doctorSchema); 

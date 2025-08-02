@@ -62,7 +62,7 @@ const Profile = () => {
     if (!avatar) return "";
     if (avatar.startsWith("http")) return avatar;
     // Always use backend port for avatars
-    return `http://localhost:5002${avatar}`;
+    return `http://localhost:5005${avatar}`;
   }
 
   const handleChange = (e) => {

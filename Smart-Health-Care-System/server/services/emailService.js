@@ -25,6 +25,15 @@ const generateOTP = () => {
 const sendOTPEmail = async (email, otp, firstName) => {
   try {
     console.log("Attempting to send email to:", email);
+    
+    // Check if email credentials are configured
+    if (!process.env.MAILTRAP_USER || !process.env.MAILTRAP_PASS) {
+      console.log("Email credentials not configured, using development mode");
+      // In development, just log the OTP instead of sending email
+      console.log(`DEVELOPMENT MODE: OTP for ${email} is: ${otp}`);
+      return { success: true, messageId: "development-mode" };
+    }
+
     console.log("Using Mailtrap config:", {
       host: process.env.MAILTRAP_HOST,
       port: process.env.MAILTRAP_PORT,

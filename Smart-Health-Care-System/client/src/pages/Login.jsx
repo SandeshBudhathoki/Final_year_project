@@ -33,8 +33,12 @@ const Login = () => {
 
       if (result.success) {
         toast.success("Login successful!");
+        
+        // Redirect based on user role
         if (result.user && result.user.role === "admin") {
           navigate("/admin");
+        } else if (result.user && result.user.role === "doctor") {
+          navigate("/doctor");
         } else {
           navigate("/dashboard");
         }
@@ -72,7 +76,7 @@ const Login = () => {
             Login
           </h1>
           <p style={{ color: "#64748b" }}>
-            Sign in to your diabetes prediction account
+            Sign in to your account (Patients, Doctors & Admins)
           </p>
         </div>
 

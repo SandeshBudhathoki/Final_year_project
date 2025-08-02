@@ -37,6 +37,7 @@ const Appointments = () => {
   const [rescheduleError, setRescheduleError] = useState("");
   const [rescheduleDoctor, setRescheduleDoctor] = useState(null);
   const [rescheduleSlots, setRescheduleSlots] = useState([]);
+  const [appointmentStats, setAppointmentStats] = useState(null);
 
   useEffect(() => {
     const fetchAppointments = async () => {
@@ -44,19 +45,52 @@ const Appointments = () => {
       setError("");
       try {
         const token = localStorage.getItem("token");
-        const res = await fetch("/api/appointments", {
+        
+        // Add filter parameter based on current tab
+        let url = "/api/appointments";
+        if (tab === "past") {
+          url += "?filter=past";
+        } else if (tab === "upcoming") {
+          url += "?filter=upcoming";
+        }
+        
+        console.log("Fetching appointments from:", url);
+        
+        const res = await fetch(url, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error("Failed to fetch appointments");
         const data = await res.json();
+        console.log("Fetched appointments:", data);
         setAppointments(data.appointments);
       } catch (err) {
+        console.error("Error fetching appointments:", err);
         setError(err.message || "Error fetching appointments");
       } finally {
         setLoading(false);
       }
     };
     fetchAppointments();
+  }, [success, tab]); // Add tab as dependency to refetch when tab changes
+
+  // Fetch appointment statistics
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch("/api/appointments/stats", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setAppointmentStats(data.stats);
+          console.log("Appointment stats:", data.stats);
+        }
+      } catch (err) {
+        console.error("Error fetching appointment stats:", err);
+      }
+    };
+    fetchStats();
   }, [success]);
 
   useEffect(() => {
@@ -160,20 +194,39 @@ const Appointments = () => {
     }
   };
 
-  // Tabs logic
-  const now = new Date();
+  // Tabs logic - simplified since backend handles filtering
   const filteredAppointments = appointments.filter(app => {
-    // Use startTime for filtering
+    // Skip appointments with invalid data
+    if (!app || !app._id) {
+      console.warn("Skipping invalid appointment:", app);
+      return false;
+    }
+    
+    // For "all" tab, show all appointments
+    if (tab === "all") return true;
+    
+    // For "upcoming" and "past" tabs, backend already filtered them
+    // Just do additional client-side filtering if needed
     const slotDateTime = app.slot?.date && app.slot?.startTime
       ? new Date(app.slot.date + 'T' + app.slot.startTime)
       : null;
+    
+    console.log(`Appointment: ${app._id}, Status: ${app.status}, Date: ${app.slot?.date}, Time: ${app.slot?.startTime}`);
+    
     if (tab === "upcoming") {
-      return app.status === "pending" && slotDateTime && slotDateTime >= now;
+      // Show pending appointments that are in the future
+      return app.status === "pending" && slotDateTime && slotDateTime >= new Date();
     } else if (tab === "past") {
-      return app.status === "completed" || app.status === "cancelled" || (slotDateTime && slotDateTime < now);
+      // Show completed, cancelled appointments OR appointments with past dates
+      const isPastByStatus = app.status === "completed" || app.status === "cancelled";
+      const isPastByDate = slotDateTime && slotDateTime < new Date();
+      return isPastByStatus || isPastByDate;
     }
+    
     return true;
   });
+
+  console.log(`Tab: ${tab}, Total appointments: ${appointments.length}, Filtered: ${filteredAppointments.length}`);
 
   // Doctor categories
   const categories = Array.from(new Set(doctors.map(d => d.category)));
@@ -204,7 +257,18 @@ const Appointments = () => {
         </div>
         <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
           {doctorsInCategory.length === 0 ? (
-            <div>No doctors found in this category.</div>
+            <div style={{ 
+              width: "100%", 
+              textAlign: "center", 
+              padding: "40px 20px",
+              color: "#6b7280",
+              fontSize: "16px"
+            }}>
+              {selectedCategory 
+                ? `No doctors available in "${selectedCategory}" category. Try selecting "All" or another category.`
+                : "No doctors are currently available. Please check back later."
+              }
+            </div>
           ) : (
             doctorsInCategory.map(doc => (
               <div key={doc._id} style={{ background: "#fff", borderRadius: 10, boxShadow: "0 2px 8px #e0e7ef", padding: 18, minWidth: 220, flex: 1, display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 12 }}>
@@ -236,28 +300,90 @@ const Appointments = () => {
         <button onClick={() => setTab("past")}
           style={{ padding: "8px 18px", borderRadius: 6, border: tab === "past" ? "2px solid #3b82f6" : "1px solid #e5e7eb", background: tab === "past" ? "#3b82f6" : "#fff", color: tab === "past" ? "#fff" : "#222", fontWeight: 500, cursor: "pointer" }}>Past</button>
       </div>
+
+      {/* Appointment Summary */}
+      {appointmentStats && (
+        <div style={{ 
+          background: "#f8fafc", 
+          borderRadius: 8, 
+          padding: 16, 
+          marginBottom: 24,
+          display: "flex",
+          gap: 24,
+          flexWrap: "wrap"
+        }}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: "24px", fontWeight: "bold", color: "#3b82f6" }}>
+              {appointmentStats.total}
+            </div>
+            <div style={{ fontSize: "14px", color: "#6b7280" }}>Total</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: "24px", fontWeight: "bold", color: "#22c55e" }}>
+              {appointmentStats.upcoming}
+            </div>
+            <div style={{ fontSize: "14px", color: "#6b7280" }}>Upcoming</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: "24px", fontWeight: "bold", color: "#f59e42" }}>
+              {appointmentStats.past}
+            </div>
+            <div style={{ fontSize: "14px", color: "#6b7280" }}>Past</div>
+          </div>
+          {appointmentStats.byStatus.pending && (
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: "24px", fontWeight: "bold", color: "#3b82f6" }}>
+                {appointmentStats.byStatus.pending}
+              </div>
+              <div style={{ fontSize: "14px", color: "#6b7280" }}>Pending</div>
+            </div>
+          )}
+          {appointmentStats.byStatus.completed && (
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: "24px", fontWeight: "bold", color: "#22c55e" }}>
+                {appointmentStats.byStatus.completed}
+              </div>
+              <div style={{ fontSize: "14px", color: "#6b7280" }}>Completed</div>
+            </div>
+          )}
+        </div>
+      )}
       {loading ? (
         <div>Loading appointments...</div>
       ) : error ? (
         <div style={{ color: "#ef4444" }}>{error}</div>
       ) : filteredAppointments.length === 0 ? (
-        <div>No appointments found.</div>
+        <div style={{ 
+          textAlign: "center", 
+          padding: "40px 20px",
+          color: "#6b7280",
+          fontSize: "16px",
+          background: "#f8fafc",
+          borderRadius: "8px"
+        }}>
+          {tab === "upcoming" 
+            ? "No upcoming appointments found. Book an appointment with a doctor above."
+            : tab === "past"
+            ? "No past appointments found."
+            : "No appointments found. Book your first appointment with a doctor above."
+          }
+        </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
           {filteredAppointments.map(app => (
             <div key={app._id} style={{ background: "#fff", borderRadius: 10, boxShadow: "0 2px 8px #e0e7ef", padding: 20, display: "flex", alignItems: "center", gap: 18 }}>
               <div style={{ width: 60, height: 60, borderRadius: "50%", background: "#e5e7eb", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "#3b82f6", fontWeight: 700, overflow: "hidden" }}>
-                {app.doctorId.photo ? (
-                  <img src={app.doctorId.photo} alt={app.doctorId.name} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} />
+                {app.doctorId?.photo ? (
+                  <img src={app.doctorId.photo} alt={app.doctorId?.name || "Doctor"} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} />
                 ) : (
-                  app.doctorId.name.split(" ").map(n => n[0]).join("").toUpperCase()
+                  (app.doctorId?.name || "D").split(" ").map(n => n[0]).join("").toUpperCase()
                 )}
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, fontSize: 17 }}>{app.doctorId.name}</div>
-                <div style={{ color: "#3b82f6", fontSize: 14 }}>{app.doctorId.category}</div>
-                <div style={{ color: "#6b7280", fontSize: 14 }}>Slot: {app.slot.date} {app.slot.startTime} to {app.slot.endTime}</div>
-                <div style={{ color: "#6b7280", fontSize: 14 }}>Reason: {app.reason}</div>
+                <div style={{ fontWeight: 600, fontSize: 17 }}>{app.doctorId?.name || "Unknown Doctor"}</div>
+                <div style={{ color: "#3b82f6", fontSize: 14 }}>{app.doctorId?.category || "General"}</div>
+                <div style={{ color: "#6b7280", fontSize: 14 }}>Slot: {app.slot?.date || "N/A"} {app.slot?.startTime || ""} to {app.slot?.endTime || ""}</div>
+                <div style={{ color: "#6b7280", fontSize: 14 }}>Reason: {app.reason || "General consultation"}</div>
                 <div style={{ color: getStatusColor(app.status), fontWeight: 500, fontSize: 14 }}>Status: {app.status}</div>
               </div>
               {tab !== "past" && app.status === 'pending' && (
@@ -301,9 +427,9 @@ const Appointments = () => {
                     onChange={e => setRescheduleReason(e.target.value)}
                     style={{ width: "100%", padding: 8, borderRadius: 6, border: "1.5px solid #3b82f6", background: "#f8fafc" }}
                   >
-                    {REASON_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label} ({opt.duration} min)</option>
-                    ))}
+                                {REASON_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
                   </select>
                 </div>
                 <div style={{ marginBottom: 16 }}>

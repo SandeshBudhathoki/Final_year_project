@@ -47,11 +47,61 @@ const DoctorProfile = () => {
         <div style={{ color: "#6b7280", fontSize: 15, marginBottom: 4 }}>{doctor.expertise}</div>
         <div style={{ color: "#222", fontWeight: 500, marginBottom: 8 }}>Fee: Rs. {doctor.fee}</div>
         {doctor.contactInfo && <div style={{ color: "#6b7280", fontSize: 15, marginBottom: 8 }}>{doctor.contactInfo}</div>}
+        
+        {/* Availability Status */}
+        <div style={{ 
+          display: "flex", 
+          alignItems: "center", 
+          justifyContent: "center",
+          gap: "0.5rem", 
+          marginTop: "1rem",
+          padding: "0.5rem",
+          borderRadius: "6px",
+          background: doctor.availabilityStatus === "available" ? "#f0fdf4" : 
+                     doctor.availabilityStatus === "busy" ? "#fef3c7" : 
+                     doctor.availabilityStatus === "booked" ? "#fef2f2" : "#f3f4f6",
+          border: `1px solid ${
+            doctor.availabilityStatus === "available" ? "#22c55e" : 
+            doctor.availabilityStatus === "busy" ? "#f59e42" : 
+            doctor.availabilityStatus === "booked" ? "#ef4444" : "#6b7280"
+          }`
+        }}>
+          <span style={{ 
+            color: doctor.availabilityStatus === "available" ? "#22c55e" : 
+                   doctor.availabilityStatus === "busy" ? "#f59e42" : 
+                   doctor.availabilityStatus === "booked" ? "#ef4444" : "#6b7280",
+            fontWeight: "bold",
+            textTransform: "uppercase",
+            fontSize: "0.8rem"
+          }}>
+            {doctor.availabilityStatus === "booked" ? "BOOKED" : doctor.availabilityStatus}
+          </span>
+          {doctor.availabilityStatus !== "available" && (
+            <span style={{ color: "#64748b", fontSize: "0.8rem" }}>
+              {doctor.availabilityStatus === "busy" ? "Currently with patient" : 
+               doctor.availabilityStatus === "booked" ? "No new bookings" : "Offline"}
+            </span>
+          )}
+        </div>
+        
         <button
-          style={{ marginTop: 16, padding: "10px 32px", background: "#3b82f6", color: "#fff", border: "none", borderRadius: 6, fontWeight: 600, fontSize: 16, cursor: "pointer" }}
+          style={{ 
+            marginTop: 16, 
+            padding: "10px 32px", 
+            background: doctor.availabilityStatus === "available" ? "#3b82f6" : 
+                       doctor.availabilityStatus === "booked" ? "#ef4444" : "#9ca3af", 
+            color: "#fff", 
+            border: "none", 
+            borderRadius: 6, 
+            fontWeight: 600, 
+            fontSize: 16, 
+            cursor: doctor.availabilityStatus === "available" ? "pointer" : "not-allowed" 
+          }}
           onClick={() => navigate(`/book/${doctor._id}`)}
+          disabled={doctor.availabilityStatus !== "available"}
         >
-          Book Appointment
+          {doctor.availabilityStatus === "available" ? "Book Appointment" : 
+           doctor.availabilityStatus === "booked" ? "Doctor Fully Booked" : "Doctor Unavailable"}
         </button>
       </div>
       <div style={{ marginTop: 32 }}>

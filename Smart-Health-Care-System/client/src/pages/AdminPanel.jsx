@@ -9,7 +9,10 @@ import {
   FaEye,
   FaEdit,
   FaCheckCircle,
-  FaCalendarPlus, FaTrashAlt, FaTimesCircle
+  FaCalendarPlus, 
+  FaTrashAlt, 
+  FaTimesCircle,
+  FaUserMd
 } from "react-icons/fa";
 import "./AdminPanel.css";
 import { useAuth } from "../contexts/AuthContext.jsx";
@@ -25,7 +28,8 @@ const menuItems = [
   { name: "Users", icon: <FaUsers /> },
   { name: "History", icon: <FaHistory /> },
   { name: "Appointments", icon: <FaHistory /> },
-  { name: "Doctor Schedules", icon: <FaUserShield /> },
+  { name: "Doctor Availability", icon: <FaUserMd /> },
+  { name: "Manage Doctors", icon: <FaUserMd /> },
   { name: "Reports", icon: <FaTachometerAlt /> },
 ];
 
@@ -57,20 +61,37 @@ export default function AdminPanel() {
   const [filterAppDoctor, setFilterAppDoctor] = useState("");
   const [filterAppStatus, setFilterAppStatus] = useState("");
   const [doctors, setDoctors] = useState([]);
-  const [selectedDoctor, setSelectedDoctor] = useState(null);
-  const [slotsLoading, setSlotsLoading] = useState(false);
-  const [slotDate, setSlotDate] = useState("");
-  const [slotStartTime, setSlotStartTime] = useState("");
-  const [slotEndTime, setSlotEndTime] = useState("");
-  const [slotError, setSlotError] = useState("");
-  const [slotSuccess, setSlotSuccess] = useState("");
-  const [editSlotIdx, setEditSlotIdx] = useState(null);
-  const [editSlotDate, setEditSlotDate] = useState("");
-  const [editSlotStartTime, setEditSlotStartTime] = useState("");
-  const [editSlotEndTime, setEditSlotEndTime] = useState("");
   const [reportStats, setReportStats] = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState("");
+  const [doctorAvailability, setDoctorAvailability] = useState([]);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState("");
+  const [doctorsForUser, setDoctorsForUser] = useState([]);
+  const [doctorsForUserLoading, setDoctorsForUserLoading] = useState(false);
+  const [doctorsForUserError, setDoctorsForUserError] = useState("");
+  const [showCreateDoctorUser, setShowCreateDoctorUser] = useState(false);
+  const [createDoctorUserForm, setCreateDoctorUserForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    password: "",
+    doctorId: ""
+  });
+
+  // Doctor edit state
+  const [editDoctor, setEditDoctor] = useState(null);
+  const [editDoctorForm, setEditDoctorForm] = useState({
+    name: "",
+    category: "",
+    qualifications: "",
+    experience: "",
+    expertise: "",
+    fee: "",
+    contactInfo: ""
+  });
+
+
 
   useEffect(() => {
     if (active === "Users") {
@@ -153,29 +174,60 @@ export default function AdminPanel() {
           setAppointmentsError(err.message);
           setAppointmentsLoading(false);
         });
-    } else if (active === "Doctor Schedules") {
-      setSlotsLoading(true);
-      fetch("/api/doctors", {
+    } else if (active === "Doctor Availability") {
+      setAvailabilityLoading(true);
+      setAvailabilityError("");
+      fetch("/api/doctors/admin/availability", {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       })
-        .then((res) => res.json())
-        .then((data) => {
-          setDoctors(data.doctors || []);
-          setSlotsLoading(false);
+        .then((res) => {
+          if (!res.ok) throw new Error("Failed to fetch doctor availability");
+          return res.json();
         })
-        .catch(() => setSlotsLoading(false));
+        .then((data) => {
+          setDoctorAvailability(data.doctors || []);
+          setAvailabilityLoading(false);
+        })
+        .catch((err) => {
+          setAvailabilityError(err.message);
+          setAvailabilityLoading(false);
+        });
+    } else if (active === "Manage Doctors") {
+      setDoctorsForUserLoading(true);
+      setDoctorsForUserError("");
+      fetch("/api/auth/admin/doctors", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error("Failed to fetch doctors");
+          return res.json();
+        })
+        .then((data) => {
+          setDoctorsForUser(data.doctors || []);
+          setDoctorsForUserLoading(false);
+        })
+        .catch((err) => {
+          setDoctorsForUserError(err.message);
+          setDoctorsForUserLoading(false);
+        });
     } else if (active === "Reports") {
       setReportLoading(true);
       setReportError("");
       fetch("/api/appointments/admin/stats", {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       })
-        .then((res) => res.json())
+        .then((res) => {
+          if (!res.ok) throw new Error("Failed to fetch appointment stats");
+          return res.json();
+        })
         .then((data) => {
           setReportStats(data);
           setReportLoading(false);
         })
-        .catch(() => setReportLoading(false));
+        .catch((err) => {
+          setReportError(err.message);
+          setReportLoading(false);
+        });
     }
   }, [active]);
 
@@ -322,41 +374,15 @@ export default function AdminPanel() {
     }
   };
 
-  const handleAdminCancel = async (id) => {
-    if (!window.confirm("Are you sure you want to cancel this appointment?")) return;
-    try {
-      const res = await fetch(`/api/appointments/${id}/cancel`, {
-        method: "PATCH",
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      });
-      if (!res.ok) throw new Error("Failed to cancel appointment");
-      setAppointments((prev) => prev.map(a => a._id === id ? { ...a, status: "cancelled" } : a));
-      toast.success("Appointment cancelled.");
-    } catch (err) {
-      toast.error("Error cancelling appointment");
-    }
-  };
-
-  const handleAdminComplete = async (id) => {
-    if (!window.confirm("Mark this appointment as completed?")) return;
-    try {
-      const res = await fetch(`/api/appointments/${id}/complete`, {
-        method: "PATCH",
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      });
-      if (!res.ok) throw new Error("Failed to complete appointment");
-      setAppointments((prev) => prev.map(a => a._id === id ? { ...a, status: "completed" } : a));
-      toast.success("Appointment marked as completed.");
-    } catch (err) {
-      toast.error("Error completing appointment");
-    }
-  };
-
   const handleAdminAccept = async (id) => {
     try {
-      const res = await fetch(`/api/appointments/${id}/accept`, {
+      const res = await fetch(`/api/appointments/${id}/status`, {
         method: "PATCH",
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: { 
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}` 
+        },
+        body: JSON.stringify({ status: "confirmed" })
       });
       if (!res.ok) throw new Error("Failed to accept appointment");
       setAppointments((prev) => prev.map(a => a._id === id ? { ...a, status: "confirmed" } : a));
@@ -369,16 +395,161 @@ export default function AdminPanel() {
   const handleAdminReject = async (id) => {
     if (!window.confirm("Are you sure you want to reject this appointment?")) return;
     try {
-      const res = await fetch(`/api/appointments/${id}/reject`, {
+      const res = await fetch(`/api/appointments/${id}/status`, {
         method: "PATCH",
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: { 
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}` 
+        },
+        body: JSON.stringify({ status: "rejected" })
       });
       if (!res.ok) throw new Error("Failed to reject appointment");
-      setAppointments((prev) => prev.map(a => a._id === id ? { ...a, status: "cancelled" } : a));
+      setAppointments((prev) => prev.map(a => a._id === id ? { ...a, status: "rejected" } : a));
       toast.success("Appointment rejected.");
     } catch (err) {
       toast.error("Error rejecting appointment");
     }
+  };
+
+  const handleAdminComplete = async (id) => {
+    if (!window.confirm("Mark this appointment as completed?")) return;
+    try {
+      const res = await fetch(`/api/appointments/${id}/status`, {
+        method: "PATCH",
+        headers: { 
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}` 
+        },
+        body: JSON.stringify({ status: "completed" })
+      });
+      if (!res.ok) throw new Error("Failed to complete appointment");
+      setAppointments((prev) => prev.map(a => a._id === id ? { ...a, status: "completed" } : a));
+      toast.success("Appointment marked as completed.");
+    } catch (err) {
+      toast.error("Error completing appointment");
+    }
+  };
+
+  const handleAdminCancel = async (id) => {
+    if (!window.confirm("Are you sure you want to cancel this appointment?")) return;
+    try {
+      const res = await fetch(`/api/appointments/${id}/status`, {
+        method: "PATCH",
+        headers: { 
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}` 
+        },
+        body: JSON.stringify({ status: "cancelled" })
+      });
+      if (!res.ok) throw new Error("Failed to cancel appointment");
+      setAppointments((prev) => prev.map(a => a._id === id ? { ...a, status: "cancelled" } : a));
+      toast.success("Appointment cancelled.");
+    } catch (err) {
+      toast.error("Error cancelling appointment");
+    }
+  };
+
+  const handleAdminDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this appointment?")) return;
+    try {
+      const res = await fetch(`/api/appointments/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      if (!res.ok) throw new Error("Failed to delete appointment");
+      setAppointments((prev) => prev.filter(a => a._id !== id));
+      toast.success("Appointment deleted.");
+    } catch (err) {
+      toast.error("Error deleting appointment");
+    }
+  };
+
+  // Enhanced status-based action rendering
+  const renderAppointmentActions = (appointment) => {
+    const { status, _id } = appointment;
+    
+    switch (status) {
+      case 'pending':
+        return (
+          <>
+            <button
+              title="Accept Appointment"
+              onClick={() => handleAdminAccept(_id)}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "#22c55e" }}
+            >
+              <FaCheckCircle />
+            </button>
+            <button
+              title="Reject Appointment"
+              onClick={() => handleAdminReject(_id)}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444" }}
+            >
+              <FaTimesCircle />
+            </button>
+            <button
+              title="Cancel Appointment"
+              onClick={() => handleAdminCancel(_id)}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "#f59e42" }}
+            >
+              <FaTrash />
+            </button>
+          </>
+        );
+      
+      case 'confirmed':
+        return (
+          <button
+            title="Mark as Completed"
+            onClick={() => handleAdminComplete(_id)}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#22c55e" }}
+          >
+            <FaCheckCircle />
+          </button>
+        );
+      
+      case 'in_progress':
+        return (
+          <button
+            title="Mark as Completed"
+            onClick={() => handleAdminComplete(_id)}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#22c55e" }}
+          >
+            <FaCheckCircle />
+          </button>
+        );
+      
+      case 'completed':
+      case 'cancelled':
+      case 'rejected':
+      case 'no_show':
+        return (
+          <button
+            title="Delete Appointment"
+            onClick={() => handleAdminDelete(_id)}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444" }}
+          >
+            <FaTrash />
+          </button>
+        );
+      
+      default:
+        return null;
+    }
+  };
+
+  // Enhanced status color mapping
+  const getStatusColor = (status) => {
+    const colors = {
+      pending: '#3b82f6',
+      confirmed: '#22c55e', 
+      in_progress: '#f59e42',
+      completed: '#059669',
+      cancelled: '#ef4444',
+      rejected: '#dc2626',
+      no_show: '#7c3aed',
+      rescheduled: '#0891b2'
+    };
+    return colors[status] || '#6b7280';
   };
 
   const filteredAppointments = appointments.filter(app => {
@@ -429,108 +600,89 @@ export default function AdminPanel() {
     URL.revokeObjectURL(url);
   };
 
-  const handleSelectDoctor = (id) => {
-    setSelectedDoctor(doctors.find((d) => d._id === id));
-    setSlotDate("");
-    setSlotStartTime("");
-    setSlotEndTime("");
-    setSlotError("");
-    setSlotSuccess("");
+
+
+  // Doctor management functions
+  const handleEditDoctor = (doctor) => {
+    setEditDoctor(doctor);
+    setEditDoctorForm({
+      name: doctor.name || "",
+      category: doctor.category || "",
+      qualifications: doctor.qualifications || "",
+      experience: doctor.experience || "",
+      expertise: doctor.expertise || "",
+      fee: doctor.fee || "",
+      contactInfo: doctor.contactInfo || ""
+    });
   };
 
-  const handleAddSlot = async (e) => {
+  const closeEditDoctorModal = () => {
+    setEditDoctor(null);
+    setEditDoctorForm({
+      name: "",
+      category: "",
+      qualifications: "",
+      experience: "",
+      expertise: "",
+      fee: "",
+      contactInfo: ""
+    });
+  };
+
+  const handleEditDoctorChange = (e) => {
+    setEditDoctorForm({ ...editDoctorForm, [e.target.name]: e.target.value });
+  };
+
+  const handleEditDoctorSubmit = async (e) => {
     e.preventDefault();
-    setSlotError("");
-    setSlotSuccess("");
-    if (!slotDate || !slotStartTime || !slotEndTime) {
-      setSlotError("Date, start time, and end time are required.");
-      return;
-    }
     try {
-      const res = await fetch(`/api/doctors/${selectedDoctor._id}/slots`, {
-        method: "POST",
+      const res = await fetch(`/api/doctors/${editDoctor._id}`, {
+        method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
-        body: JSON.stringify({ date: slotDate, startTime: slotStartTime, endTime: slotEndTime }),
+        body: JSON.stringify(editDoctorForm),
       });
-      if (!res.ok) throw new Error("Failed to add slot");
-      setSlotSuccess("Slot added.");
-      setSlotDate("");
-      setSlotStartTime("");
-      setSlotEndTime("");
+      
+      if (!res.ok) throw new Error("Failed to update doctor");
+      
+      toast.success("Doctor updated successfully");
+      closeEditDoctorModal();
+      
+      // Refresh doctors list
+      setDoctorsForUserLoading(true);
+      const doctorsRes = await fetch("/api/auth/admin/doctors", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      const doctorsData = await doctorsRes.json();
+      setDoctorsForUser(doctorsData.doctors || []);
+      setDoctorsForUserLoading(false);
     } catch (err) {
-      setSlotError("Error adding slot");
+      toast.error("Error updating doctor");
     }
   };
 
-  const handleRemoveSlot = async (date, startTime, endTime) => {
-    if (!window.confirm("Remove this slot?")) return;
-    setSlotError("");
-    setSlotSuccess("");
+  const handleDeleteDoctor = async (doctorId) => {
+    if (!window.confirm("Are you sure you want to delete this doctor? This action cannot be undone.")) {
+      return;
+    }
+    
     try {
-      const res = await fetch(`/api/doctors/${selectedDoctor._id}/slots`, {
+      const res = await fetch(`/api/doctors/${doctorId}`, {
         method: "DELETE",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
-        body: JSON.stringify({ date, startTime, endTime }),
       });
-      if (!res.ok) throw new Error("Failed to remove slot");
-      setSlotSuccess("Slot removed.");
+      
+      if (!res.ok) throw new Error("Failed to delete doctor");
+      
+      setDoctorsForUser(doctorsForUser.filter(d => d._id !== doctorId));
+      toast.success("Doctor deleted successfully");
     } catch (err) {
-      setSlotError("Error removing slot");
+      toast.error("Error deleting doctor");
     }
-  };
-
-  const handleEditSlot = (idx, slot) => {
-    setEditSlotIdx(idx);
-    setEditSlotDate(slot.date);
-    setEditSlotStartTime(slot.startTime);
-    setEditSlotEndTime(slot.endTime);
-    setSlotError("");
-    setSlotSuccess("");
-  };
-
-  const handleSaveEditSlot = async (e) => {
-    e.preventDefault();
-    setSlotError("");
-    setSlotSuccess("");
-    if (!editSlotDate || !editSlotStartTime || !editSlotEndTime) {
-      setSlotError("Date, start time, and end time are required.");
-      return;
-    }
-    try {
-      const res = await fetch(`/api/doctors/${selectedDoctor._id}/slots`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-        body: JSON.stringify({
-          oldDate: selectedDoctor.availableSlots[editSlotIdx].date,
-          oldStartTime: selectedDoctor.availableSlots[editSlotIdx].startTime,
-          oldEndTime: selectedDoctor.availableSlots[editSlotIdx].endTime,
-          newDate: editSlotDate,
-          newStartTime: editSlotStartTime,
-          newEndTime: editSlotEndTime,
-        }),
-      });
-      if (!res.ok) throw new Error("Failed to update slot");
-      setSlotSuccess("Slot updated.");
-      setEditSlotIdx(null);
-    } catch (err) {
-      setSlotError("Error updating slot");
-    }
-  };
-
-  const handleCancelEditSlot = () => {
-    setEditSlotIdx(null);
-    setEditSlotDate("");
-    setEditSlotStartTime("");
-    setEditSlotEndTime("");
   };
 
   return (
@@ -570,7 +722,6 @@ export default function AdminPanel() {
         <h2>{active}</h2>
         {active === "Dashboard" && (
           <div>
-            {loading && <p>Loading dashboard...</p>}
             {error && <p style={{ color: "red" }}>{error}</p>}
             {!loading && !error && stats && (
               <div>
@@ -1011,7 +1162,6 @@ export default function AdminPanel() {
                     <th>Email</th>
                     <th>Doctor</th>
                     <th>Category</th>
-                    <th>Slot</th>
                     <th>Reason</th>
                     <th>Status</th>
                     <th>Actions</th>
@@ -1024,42 +1174,10 @@ export default function AdminPanel() {
                       <td>{app.userId?.email || "N/A"}</td>
                       <td>{app.doctorId?.name || "N/A"}</td>
                       <td>{app.doctorId?.category || "N/A"}</td>
-                      <td>{app.slot ? `${app.slot.date} ${app.slot.startTime} to ${app.slot.endTime}` : "N/A"}</td>
                       <td>{app.reason || "-"}</td>
-                      <td style={{ color: app.status === 'cancelled' ? '#ef4444' : app.status === 'completed' ? '#22c55e' : '#3b82f6', fontWeight: 500 }}>{app.status}</td>
+                      <td style={{ color: getStatusColor(app.status), fontWeight: 500 }}>{app.status}</td>
                       <td style={{ display: "flex", gap: "0.5rem" }}>
-                        {app.status === 'pending' && (
-                          <>
-                           <button
-                             title="Accept Appointment"
-                             onClick={() => handleAdminAccept(app._id)}
-                             style={{ background: "none", border: "none", cursor: "pointer", color: "#22c55e" }}
-                           >
-                             <FaCheckCircle />
-                           </button>
-                           <button
-                             title="Reject Appointment"
-                             onClick={() => handleAdminReject(app._id)}
-                             style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444" }}
-                           >
-                             <FaTimesCircle />
-                           </button>
-                            <button
-                              title="Mark as Completed"
-                              onClick={() => handleAdminComplete(app._id)}
-                              style={{ background: "none", border: "none", cursor: "pointer", color: "#22c55e" }}
-                            >
-                              <FaCheckCircle />
-                            </button>
-                            <button
-                              title="Cancel Appointment"
-                              onClick={() => handleAdminCancel(app._id)}
-                              style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444" }}
-                            >
-                              <FaTrash />
-                            </button>
-                          </>
-                        )}
+                        {renderAppointmentActions(app)}
                       </td>
                     </tr>
                   ))}
@@ -1068,123 +1186,319 @@ export default function AdminPanel() {
             )}
           </div>
         )}
-        {active === "Doctor Schedules" && (
+        {active === "Doctor Availability" && (
           <div>
-            <h3>Doctor Schedules</h3>
-            {slotsLoading ? (
-              <div>Loading doctors...</div>
-            ) : (
-              <div style={{ marginBottom: 24 }}>
-                <label style={{ fontWeight: 500, marginRight: 8 }}>Select Doctor:</label>
-                <select
-                  value={selectedDoctor?._id || ""}
-                  onChange={e => handleSelectDoctor(e.target.value)}
-                  style={{ padding: 8, borderRadius: 6, border: "1px solid #cbd5e1", minWidth: 200 }}
-                >
-                  <option value="">-- Select --</option>
-                  {doctors.map(doc => (
-                    <option key={doc._id} value={doc._id}>
-                      {doc.name} ({doc.category})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            {selectedDoctor && (
-              <div style={{ marginBottom: 32 }}>
-                <h4>Available Slots for {selectedDoctor.name}</h4>
-                <form onSubmit={handleAddSlot} style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 16 }}>
-                  <input
-                    type="date"
-                    value={slotDate}
-                    onChange={e => setSlotDate(e.target.value)}
-                    style={{ padding: 8, borderRadius: 6, border: "1px solid #cbd5e1" }}
-                  />
-                  <input
-                    type="time"
-                    value={slotStartTime}
-                    onChange={e => setSlotStartTime(e.target.value)}
-                    style={{ padding: 8, borderRadius: 6, border: "1px solid #cbd5e1" }}
-                  />
-                  <span>to</span>
-                  <input
-                    type="time"
-                    value={slotEndTime}
-                    onChange={e => setSlotEndTime(e.target.value)}
-                    style={{ padding: 8, borderRadius: 6, border: "1px solid #cbd5e1" }}
-                  />
-                  <button type="submit" style={{ padding: "8px 18px", borderRadius: 6, border: "none", background: "#3b82f6", color: "#fff", fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <FaCalendarPlus /> Add Slot
-                  </button>
-                </form>
-                {slotError && <div style={{ color: "#ef4444", marginBottom: 8 }}>{slotError}</div>}
-                {slotSuccess && <div style={{ color: "#22c55e", marginBottom: 8 }}>{slotSuccess}</div>}
+            <h3>Doctor Availability Management</h3>
+            {availabilityLoading && <p>Loading doctor availability...</p>}
+            {availabilityError && <p style={{ color: "red" }}>{availabilityError}</p>}
+            {!availabilityLoading && !availabilityError && (
+              <div>
+                <div style={{ marginBottom: "1rem" }}>
+                  <p>Monitor and manage doctor availability status. Doctors can set themselves as available, busy, or offline.</p>
+                </div>
                 <table className="admin-table">
                   <thead>
                     <tr>
-                      <th>Date</th>
-                      <th>Time</th>
+                      <th>Doctor Name</th>
+                      <th>Category</th>
                       <th>Status</th>
-                      <th>Actions</th>
+                      <th>Last Updated</th>
+                      <th>Notes</th>
+                      <th>Current Patient</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedDoctor.availableSlots && selectedDoctor.availableSlots.length > 0 ? (
-                      selectedDoctor.availableSlots.map((slot, idx) => (
-                        <tr key={idx}>
-                          <td>
-                            {editSlotIdx === idx ? (
-                              <input type="date" value={editSlotDate} onChange={e => setEditSlotDate(e.target.value)} style={{ padding: 6, borderRadius: 6, border: "1px solid #cbd5e1" }} />
-                            ) : (
-                              slot.date
-                            )}
-                          </td>
-                          <td>
-                            {editSlotIdx === idx ? (
-                              <>
-                                <input type="time" value={editSlotStartTime} onChange={e => setEditSlotStartTime(e.target.value)} style={{ padding: 6, borderRadius: 6, border: "1px solid #cbd5e1", marginRight: 4 }} />
-                                <span>to</span>
-                                <input type="time" value={editSlotEndTime} onChange={e => setEditSlotEndTime(e.target.value)} style={{ padding: 6, borderRadius: 6, border: "1px solid #cbd5e1", marginLeft: 4 }} />
-                              </>
-                            ) : (
-                              `${slot.startTime} to ${slot.endTime}`
-                            )}
-                          </td>
-                          <td style={{ color: slot.isBooked ? '#ef4444' : '#22c55e', fontWeight: 500 }}>{slot.isBooked ? 'Booked' : 'Available'}</td>
-                          <td>
-                            {!slot.isBooked && (
-                              editSlotIdx === idx ? (
-                                <>
-                                  <button onClick={handleSaveEditSlot} style={{ marginRight: 8, padding: "6px 14px", borderRadius: 6, border: "none", background: "#22c55e", color: "#fff", fontWeight: 600 }}>Save</button>
-                                  <button onClick={handleCancelEditSlot} style={{ padding: "6px 14px", borderRadius: 6, border: "none", background: "#e5e7eb", color: "#222", fontWeight: 600 }}>Cancel</button>
-                                </>
-                              ) : (
-                                <>
-                                  <button
-                                    title="Edit Slot"
-                                    onClick={() => handleEditSlot(idx, slot)}
-                                    style={{ background: "none", border: "none", cursor: "pointer", color: "#2563eb", marginRight: 8 }}
-                                  >
-                                    <FaEdit />
-                                  </button>
-                                  <button
-                                    title="Remove Slot"
-                                    onClick={() => handleRemoveSlot(slot.date, slot.startTime, slot.endTime)}
-                                    style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444" }}
-                                  >
-                                    <FaTrashAlt />
-                                  </button>
-                                </>
-                              )
-                            )}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr><td colSpan={4}>No slots found.</td></tr>
-                    )}
+                    {doctorAvailability.map(doctor => (
+                      <tr key={doctor._id}>
+                        <td>{doctor.name}</td>
+                        <td>{doctor.category}</td>
+                        <td>
+                          <span style={{ 
+                            color: doctor.availabilityStatus === 'available' ? '#22c55e' : 
+                                   doctor.availabilityStatus === 'busy' ? '#f59e42' : '#6b7280',
+                            fontWeight: 500,
+                            textTransform: 'uppercase'
+                          }}>
+                            {doctor.availabilityStatus}
+                          </span>
+                        </td>
+                        <td>
+                          {doctor.lastStatusUpdate ? 
+                            new Date(doctor.lastStatusUpdate).toLocaleString() : 
+                            'Never'
+                          }
+                        </td>
+                        <td>{doctor.statusNotes || '-'}</td>
+                        <td>{doctor.currentPatientId || '-'}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
+                
+                {doctorAvailability.length === 0 && (
+                  <div style={{ textAlign: "center", color: "#6b7280", marginTop: "2rem" }}>
+                    No doctors found or no availability data available.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+        {active === "Manage Doctors" && (
+          <div>
+            <h3>Manage Doctors</h3>
+            <p>Add new doctors to the system or manage existing doctors.</p>
+            
+            <button 
+              onClick={() => setShowCreateDoctorUser(true)}
+              style={{ 
+                marginBottom: "1rem", 
+                padding: "8px 18px", 
+                borderRadius: 6, 
+                border: "none", 
+                background: "#2563eb", 
+                color: "#fff", 
+                fontWeight: 600, 
+                cursor: "pointer" 
+              }}
+            >
+              Add New Doctor
+            </button>
+            
+            {doctorsForUserLoading && <p>Loading doctors...</p>}
+            {doctorsForUserError && <p style={{ color: "red" }}>{doctorsForUserError}</p>}
+            {!doctorsForUserLoading && !doctorsForUserError && (
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Doctor Name</th>
+                    <th>Category</th>
+                    <th>Contact Info</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {doctorsForUser.map(doctor => (
+                    <tr key={doctor._id}>
+                      <td>{doctor.name}</td>
+                      <td>{doctor.category}</td>
+                      <td>{doctor.contactInfo || "Not set"}</td>
+                      <td>
+                        <button
+                          onClick={() => handleEditDoctor(doctor)}
+                          style={{ 
+                            padding: "4px 8px", 
+                            borderRadius: 4, 
+                            border: "none", 
+                            background: "#3b82f6", 
+                            color: "#fff", 
+                            cursor: "pointer" 
+                          }}
+                          title="Edit Doctor"
+                        >
+                          <FaEdit />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteDoctor(doctor._id)}
+                          style={{ 
+                            padding: "4px 8px", 
+                            borderRadius: 4, 
+                            border: "none", 
+                            background: "#ef4444", 
+                            color: "#fff", 
+                            cursor: "pointer",
+                            marginLeft: "4px"
+                          }}
+                          title="Delete Doctor"
+                        >
+                          <FaTrash />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            
+            {/* Create Doctor User Modal */}
+            {showCreateDoctorUser && (
+              <div style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                width: "100vw",
+                height: "100vh",
+                background: "rgba(0,0,0,0.25)",
+                zIndex: 1000,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}>
+                <div style={{
+                  background: "#fff",
+                  borderRadius: 12,
+                  padding: "2rem",
+                  minWidth: 400,
+                  maxWidth: 500,
+                  boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
+                }}>
+                  <h3 style={{ marginBottom: "1rem" }}>Add New Doctor</h3>
+                  <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    try {
+                      const res = await fetch("/api/doctors", {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          Authorization: `Bearer ${localStorage.getItem("token")}`,
+                        },
+                        body: JSON.stringify({
+                          name: createDoctorUserForm.firstName,
+                          category: createDoctorUserForm.lastName,
+                          qualifications: createDoctorUserForm.qualifications,
+                          experience: createDoctorUserForm.experience,
+                          fee: createDoctorUserForm.fee,
+                          contactInfo: createDoctorUserForm.contactEmail
+                        }),
+                      });
+                      
+                      if (!res.ok) {
+                        const data = await res.json();
+                        throw new Error(data.message || "Failed to add doctor");
+                      }
+                      
+                      toast.success("Doctor added successfully!");
+                      setShowCreateDoctorUser(false);
+                      setCreateDoctorUserForm({
+                        firstName: "",
+                        lastName: "",
+                        email: "",
+                        password: "",
+                        doctorId: "",
+                        qualifications: "",
+                        experience: "",
+                        fee: "",
+                        contactEmail: ""
+                      });
+                      
+                      // Refresh doctors list
+                      setDoctorsForUserLoading(true);
+                      const doctorsRes = await fetch("/api/auth/admin/doctors", {
+                        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+                      });
+                      const doctorsData = await doctorsRes.json();
+                      setDoctorsForUser(doctorsData.doctors || []);
+                      setDoctorsForUserLoading(false);
+                    } catch (err) {
+                      toast.error(err.message);
+                    }
+                  }}>
+                    <div style={{ marginBottom: "1rem" }}>
+                      <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
+                        Doctor Name:
+                      </label>
+                      <input
+                        type="text"
+                        value={createDoctorUserForm.firstName}
+                        onChange={(e) => setCreateDoctorUserForm(prev => ({ ...prev, firstName: e.target.value }))}
+                        placeholder="e.g., Dr. John Smith"
+                        required
+                        style={{ width: "100%", padding: "0.5rem", borderRadius: 6, border: "1px solid #cbd5e1" }}
+                      />
+                    </div>
+                    <div style={{ marginBottom: "1rem" }}>
+                      <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
+                        Category:
+                      </label>
+                      <input
+                        type="text"
+                        value={createDoctorUserForm.lastName}
+                        onChange={(e) => setCreateDoctorUserForm(prev => ({ ...prev, lastName: e.target.value }))}
+                        placeholder="e.g., Diabetes Specialist"
+                        required
+                        style={{ width: "100%", padding: "0.5rem", borderRadius: 6, border: "1px solid #cbd5e1" }}
+                      />
+                    </div>
+                    <div style={{ marginBottom: "1rem" }}>
+                      <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
+                        Qualifications:
+                      </label>
+                      <input
+                        type="text"
+                        value={createDoctorUserForm.qualifications}
+                        onChange={(e) => setCreateDoctorUserForm(prev => ({ ...prev, qualifications: e.target.value }))}
+                        placeholder="e.g., MBBS, MD"
+                        style={{ width: "100%", padding: "0.5rem", borderRadius: 6, border: "1px solid #cbd5e1" }}
+                      />
+                    </div>
+                    <div style={{ marginBottom: "1rem" }}>
+                      <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
+                        Experience (years):
+                      </label>
+                      <input
+                        type="number"
+                        value={createDoctorUserForm.experience}
+                        onChange={(e) => setCreateDoctorUserForm(prev => ({ ...prev, experience: e.target.value }))}
+                        placeholder="e.g., 10"
+                        style={{ width: "100%", padding: "0.5rem", borderRadius: 6, border: "1px solid #cbd5e1" }}
+                      />
+                    </div>
+                    <div style={{ marginBottom: "1rem" }}>
+                      <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
+                        Fee:
+                      </label>
+                      <input
+                        type="number"
+                        value={createDoctorUserForm.fee}
+                        onChange={(e) => setCreateDoctorUserForm(prev => ({ ...prev, fee: e.target.value }))}
+                        placeholder="e.g., 1500"
+                        required
+                        style={{ width: "100%", padding: "0.5rem", borderRadius: 6, border: "1px solid #cbd5e1" }}
+                      />
+                    </div>
+                    <div style={{ marginBottom: "1rem" }}>
+                      <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
+                        Contact Email:
+                      </label>
+                      <input
+                        type="email"
+                        value={createDoctorUserForm.contactEmail}
+                        onChange={(e) => setCreateDoctorUserForm(prev => ({ ...prev, contactEmail: e.target.value }))}
+                        placeholder="e.g., doctor.smith@hospital.com"
+                        required
+                        style={{ width: "100%", padding: "0.5rem", borderRadius: 6, border: "1px solid #cbd5e1" }}
+                      />
+                    </div>
+                    <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                      <button
+                        type="button"
+                        onClick={() => setShowCreateDoctorUser(false)}
+                        style={{
+                          padding: "0.5rem 1rem",
+                          borderRadius: 6,
+                          border: "1px solid #cbd5e1",
+                          background: "#fff",
+                          cursor: "pointer"
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        style={{
+                          padding: "0.5rem 1rem",
+                          borderRadius: 6,
+                          border: "none",
+                          background: "#2563eb",
+                          color: "#fff",
+                          cursor: "pointer"
+                        }}
+                      >
+                        Add Doctor
+                      </button>
+                    </div>
+                  </form>
+                </div>
               </div>
             )}
           </div>
@@ -1202,66 +1516,83 @@ export default function AdminPanel() {
                 <div style={{ display: "flex", gap: 24, marginBottom: 32 }}>
                   <div className="admin-stat-card">
                     <div className="admin-stat-label">Total Appointments</div>
-                    <div className="admin-stat-value">{reportStats.total}</div>
+                    <div className="admin-stat-value">{reportStats.total || 0}</div>
                   </div>
-                  {Object.entries(reportStats.byStatus).map(([status, count]) => (
+                  {reportStats.byStatus && Object.entries(reportStats.byStatus).map(([status, count]) => (
                     <div key={status} className="admin-stat-card">
                       <div className="admin-stat-label">{status.charAt(0).toUpperCase() + status.slice(1)}</div>
-                      <div className="admin-stat-value">{count}</div>
+                      <div className="admin-stat-value">{count || 0}</div>
                     </div>
                   ))}
                 </div>
                 {/* Charts */}
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 32 }}>
-                  {/* Bar chart: Appointments per doctor */}
-                  <div style={{ flex: 1, minWidth: 320 }}>
-                    <h4>Appointments per Doctor</h4>
-                    <Bar
+                {reportStats.byDoctor && reportStats.byDoctor.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 32 }}>
+                    {/* Bar chart: Appointments per doctor */}
+                    <div style={{ flex: 1, minWidth: 320 }}>
+                      <h4>Appointments per Doctor</h4>
+                      <Bar
+                        data={{
+                          labels: reportStats.byDoctor.map(d => d.doctorName || "Unknown"),
+                          datasets: [{
+                            label: "Appointments",
+                            data: reportStats.byDoctor.map(d => d.count || 0),
+                            backgroundColor: "#3b82f6"
+                          }]
+                        }}
+                        options={{ responsive: true, plugins: { legend: { display: false } } }}
+                      />
+                    </div>
+                    {/* Pie chart: Appointments by status */}
+                    {reportStats.byStatus && Object.keys(reportStats.byStatus).length > 0 && (
+                      <div style={{ flex: 1, minWidth: 320 }}>
+                        <h4>Appointment Status Distribution</h4>
+                        <Pie
+                          data={{
+                            labels: Object.keys(reportStats.byStatus),
+                            datasets: [{
+                              data: Object.values(reportStats.byStatus),
+                              backgroundColor: ["#3b82f6", "#22c55e", "#ef4444", "#f59e42", "#8b5cf6", "#06b6d4"]
+                            }]
+                          }}
+                          options={{ responsive: true }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* Line chart: Appointments per day */}
+                {reportStats.byDay && reportStats.byDay.length > 0 && (
+                  <div style={{ marginTop: 40 }}>
+                    <h4>Appointments Trend (Last 30 Days)</h4>
+                    <Line
                       data={{
-                        labels: reportStats.byDoctor.map(d => d.doctorName),
+                        labels: reportStats.byDay.map(d => d._id || "Unknown"),
                         datasets: [{
                           label: "Appointments",
-                          data: reportStats.byDoctor.map(d => d.count),
-                          backgroundColor: "#3b82f6"
-                        }]
-                      }}
-                      options={{ responsive: true, plugins: { legend: { display: false } } }}
-                    />
-                  </div>
-                  {/* Pie chart: Appointments by status */}
-                  <div style={{ flex: 1, minWidth: 320 }}>
-                    <h4>Appointment Status Distribution</h4>
-                    <Pie
-                      data={{
-                        labels: Object.keys(reportStats.byStatus),
-                        datasets: [{
-                          data: Object.values(reportStats.byStatus),
-                          backgroundColor: ["#3b82f6", "#22c55e", "#ef4444", "#f59e42"]
+                          data: reportStats.byDay.map(d => d.count || 0),
+                          borderColor: "#3b82f6",
+                          backgroundColor: "rgba(59,130,246,0.2)",
+                          tension: 0.3
                         }]
                       }}
                       options={{ responsive: true }}
                     />
                   </div>
-                </div>
-                {/* Line chart: Appointments per day */}
-                <div style={{ marginTop: 40 }}>
-                  <h4>Appointments Trend (Last 30 Days)</h4>
-                  <Line
-                    data={{
-                      labels: reportStats.byDay.map(d => d._id),
-                      datasets: [{
-                        label: "Appointments",
-                        data: reportStats.byDay.map(d => d.count),
-                        borderColor: "#3b82f6",
-                        backgroundColor: "rgba(59,130,246,0.2)",
-                        tension: 0.3
-                      }]
-                    }}
-                    options={{ responsive: true }}
-                  />
-                </div>
+                )}
+                {/* Show message if no data */}
+                {(!reportStats.byDoctor || reportStats.byDoctor.length === 0) && 
+                 (!reportStats.byStatus || Object.keys(reportStats.byStatus).length === 0) && (
+                  <div style={{ textAlign: "center", color: "#6b7280", marginTop: 40 }}>
+                    No appointment data available for analytics.
+                  </div>
+                )}
               </div>
-            ) : null}
+            ) : (
+              <div style={{ textAlign: "center", color: "#6b7280" }}>
+                No analytics data available.
+              </div>
+            )}
           </div>
         )}
         {/* Edit User Modal */}
@@ -1417,6 +1748,157 @@ export default function AdminPanel() {
             </div>
           </div>
         )}
+        
+        {/* Edit Doctor Modal */}
+        {editDoctor && (
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              width: "100vw",
+              height: "100vh",
+              background: "rgba(0,0,0,0.25)",
+              zIndex: 1000,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            onClick={closeEditDoctorModal}
+          >
+            <div
+              style={{
+                background: "#fff",
+                borderRadius: 12,
+                padding: "2rem",
+                minWidth: 400,
+                maxWidth: 500,
+                boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 style={{ marginBottom: "1rem" }}>Edit Doctor</h3>
+              <form onSubmit={handleEditDoctorSubmit}>
+                <div style={{ marginBottom: "1rem" }}>
+                  <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
+                    Name:
+                  </label>
+                  <input
+                    type="text"
+                    name="name"
+                    value={editDoctorForm.name}
+                    onChange={handleEditDoctorChange}
+                    required
+                    style={{ width: "100%", padding: "0.5rem", borderRadius: 6, border: "1px solid #cbd5e1" }}
+                  />
+                </div>
+                <div style={{ marginBottom: "1rem" }}>
+                  <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
+                    Category:
+                  </label>
+                  <input
+                    type="text"
+                    name="category"
+                    value={editDoctorForm.category}
+                    onChange={handleEditDoctorChange}
+                    required
+                    style={{ width: "100%", padding: "0.5rem", borderRadius: 6, border: "1px solid #cbd5e1" }}
+                  />
+                </div>
+                <div style={{ marginBottom: "1rem" }}>
+                  <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
+                    Qualifications:
+                  </label>
+                  <input
+                    type="text"
+                    name="qualifications"
+                    value={editDoctorForm.qualifications}
+                    onChange={handleEditDoctorChange}
+                    style={{ width: "100%", padding: "0.5rem", borderRadius: 6, border: "1px solid #cbd5e1" }}
+                  />
+                </div>
+                <div style={{ marginBottom: "1rem" }}>
+                  <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
+                    Experience (years):
+                  </label>
+                  <input
+                    type="number"
+                    name="experience"
+                    value={editDoctorForm.experience}
+                    onChange={handleEditDoctorChange}
+                    style={{ width: "100%", padding: "0.5rem", borderRadius: 6, border: "1px solid #cbd5e1" }}
+                  />
+                </div>
+                <div style={{ marginBottom: "1rem" }}>
+                  <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
+                    Expertise:
+                  </label>
+                  <input
+                    type="text"
+                    name="expertise"
+                    value={editDoctorForm.expertise}
+                    onChange={handleEditDoctorChange}
+                    style={{ width: "100%", padding: "0.5rem", borderRadius: 6, border: "1px solid #cbd5e1" }}
+                  />
+                </div>
+                <div style={{ marginBottom: "1rem" }}>
+                  <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
+                    Fee:
+                  </label>
+                  <input
+                    type="number"
+                    name="fee"
+                    value={editDoctorForm.fee}
+                    onChange={handleEditDoctorChange}
+                    required
+                    style={{ width: "100%", padding: "0.5rem", borderRadius: 6, border: "1px solid #cbd5e1" }}
+                  />
+                </div>
+                <div style={{ marginBottom: "1rem" }}>
+                  <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
+                    Contact Info:
+                  </label>
+                  <input
+                    type="email"
+                    name="contactInfo"
+                    value={editDoctorForm.contactInfo}
+                    onChange={handleEditDoctorChange}
+                    style={{ width: "100%", padding: "0.5rem", borderRadius: 6, border: "1px solid #cbd5e1" }}
+                  />
+                </div>
+                <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                  <button
+                    type="button"
+                    onClick={closeEditDoctorModal}
+                    style={{
+                      padding: "0.5rem 1rem",
+                      borderRadius: 6,
+                      border: "1px solid #cbd5e1",
+                      background: "#fff",
+                      cursor: "pointer"
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    style={{
+                      padding: "0.5rem 1rem",
+                      borderRadius: 6,
+                      border: "none",
+                      background: "#2563eb",
+                      color: "#fff",
+                      cursor: "pointer"
+                    }}
+                  >
+                    Update Doctor
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+        
         {/* Content for other sections will go here */}
       </main>
     </div>

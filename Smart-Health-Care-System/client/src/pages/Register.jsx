@@ -13,6 +13,8 @@ import {
   EyeOff,
   Users,
   Shield,
+  UserCheck,
+  Stethoscope,
 } from "lucide-react";
 import axios from "axios";
 
@@ -28,6 +30,12 @@ const Register = () => {
     email: "",
     password: "",
     confirmPassword: "",
+    accountType: "user", // "user" or "doctor"
+    // Doctor-specific fields
+    category: "",
+    qualifications: "",
+    experience: "",
+    fee: "",
   });
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState(1); // 1: Collect data, 2: Verify OTP
@@ -76,6 +84,30 @@ const Register = () => {
       return;
     }
 
+    // Validate doctor-specific fields if account type is doctor
+    if (formData.accountType === "doctor") {
+      if (!formData.category || !formData.fee) {
+        toast.error("Category and fee are required for doctor accounts");
+        return;
+      }
+      
+      // Validate fee is a positive number
+      const feeNum = parseInt(formData.fee);
+      if (isNaN(feeNum) || feeNum <= 0) {
+        toast.error("Please enter a valid consultation fee");
+        return;
+      }
+      
+      // Validate experience is a non-negative number
+      if (formData.experience) {
+        const expNum = parseInt(formData.experience);
+        if (isNaN(expNum) || expNum < 0) {
+          toast.error("Experience must be a valid number");
+          return;
+        }
+      }
+    }
+
     setLoading(true);
 
     try {
@@ -108,20 +140,40 @@ const Register = () => {
     setLoading(true);
 
     try {
-      const response = await axios.post("/api/auth/verify-otp", {
-        ...formData,
-        otp,
-      });
+      let response;
+      
+      if (formData.accountType === "doctor") {
+        // For doctor registration, we need to create both doctor and user
+        response = await axios.post("/api/auth/verify-otp", {
+          ...formData,
+          otp,
+          role: "doctor",
+        });
+      } else {
+        // For regular user registration
+        response = await axios.post("/api/auth/verify-otp", {
+          ...formData,
+          otp,
+        });
+      }
 
       if (response.data.token) {
         // Store token and user data
         localStorage.setItem("token", response.data.token);
         toast.success("Registration successful!");
-        navigate("/dashboard");
+        
+        // Redirect based on account type
+        if (formData.accountType === "doctor") {
+          navigate("/doctor");
+        } else {
+          navigate("/dashboard");
+        }
       } else {
         toast.error(response.data.message || "Verification failed");
       }
     } catch (error) {
+      console.error("Verification error:", error);
+      console.error("Error response:", error.response?.data);
       const message = error.response?.data?.message || "Verification failed";
       toast.error(message);
     } finally {
@@ -160,7 +212,7 @@ const Register = () => {
         padding: "2rem",
       }}
     >
-      <div className="card" style={{ width: "100%", maxWidth: "400px" }}>
+      <div className="card" style={{ width: "100%", maxWidth: "450px" }}>
         <div className="text-center mb-6">
           <UserPlus
             size={48}
@@ -185,6 +237,76 @@ const Register = () => {
 
         {step === 1 ? (
           <form onSubmit={handleSendOTP}>
+            {/* Account Type Selection */}
+            <div className="form-group">
+              <label className="form-label">
+                <UserCheck
+                  size={16}
+                  style={{ display: "inline", marginRight: "0.5rem" }}
+                />
+                Account Type
+              </label>
+              <div
+                style={{
+                  display: "flex",
+                  gap: "1rem",
+                  alignItems: "center",
+                  marginTop: "0.25rem",
+                }}
+              >
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    fontWeight: 400,
+                    padding: "0.5rem 1rem",
+                    border: formData.accountType === "user" ? "2px solid #3b82f6" : "2px solid #e2e8f0",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    backgroundColor: formData.accountType === "user" ? "#eff6ff" : "transparent",
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="accountType"
+                    value="user"
+                    checked={formData.accountType === "user"}
+                    onChange={handleChange}
+                    required
+                    style={{ accentColor: "#3b82f6" }}
+                  />
+                  <User size={16} />
+                  Patient
+                </label>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    fontWeight: 400,
+                    padding: "0.5rem 1rem",
+                    border: formData.accountType === "doctor" ? "2px solid #3b82f6" : "2px solid #e2e8f0",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    backgroundColor: formData.accountType === "doctor" ? "#eff6ff" : "transparent",
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="accountType"
+                    value="doctor"
+                    checked={formData.accountType === "doctor"}
+                    onChange={handleChange}
+                    required
+                    style={{ accentColor: "#3b82f6" }}
+                  />
+                  <Stethoscope size={16} />
+                  Doctor
+                </label>
+              </div>
+            </div>
+
             <div className="form-group">
               <label className="form-label">
                 <User
@@ -298,6 +420,87 @@ const Register = () => {
                 </label>
               </div>
             </div>
+
+            {/* Doctor-specific fields */}
+            {formData.accountType === "doctor" && (
+              <>
+                <div className="form-group">
+                  <label className="form-label">
+                    <Stethoscope
+                      size={16}
+                      style={{ display: "inline", marginRight: "0.5rem" }}
+                    />
+                    Specialization
+                  </label>
+                  <input
+                    type="text"
+                    name="category"
+                    value={formData.category}
+                    onChange={handleChange}
+                    className="form-input"
+                    placeholder="e.g., Diabetes Specialist"
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">
+                    <Shield
+                      size={16}
+                      style={{ display: "inline", marginRight: "0.5rem" }}
+                    />
+                    Qualifications
+                  </label>
+                  <input
+                    type="text"
+                    name="qualifications"
+                    value={formData.qualifications}
+                    onChange={handleChange}
+                    className="form-input"
+                    placeholder="e.g., MBBS, MD"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">
+                    <UserCheck
+                      size={16}
+                      style={{ display: "inline", marginRight: "0.5rem" }}
+                    />
+                    Experience (years)
+                  </label>
+                  <input
+                    type="number"
+                    name="experience"
+                    value={formData.experience}
+                    onChange={handleChange}
+                    className="form-input"
+                    placeholder="e.g., 10"
+                    min="0"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">
+                    <Shield
+                      size={16}
+                      style={{ display: "inline", marginRight: "0.5rem" }}
+                    />
+                    Consultation Fee
+                  </label>
+                  <input
+                    type="number"
+                    name="fee"
+                    value={formData.fee}
+                    onChange={handleChange}
+                    className="form-input"
+                    placeholder="e.g., 1500"
+                    min="0"
+                    required
+                  />
+                </div>
+              </>
+            )}
 
             <div className="form-group">
               <label className="form-label">

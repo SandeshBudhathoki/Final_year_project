@@ -31,7 +31,7 @@ function AppContent() {
   const location = useLocation();
   return (
     <div className="App">
-      {location.pathname !== "/admin" && <Navbar />}
+      {location.pathname !== "/admin" && location.pathname !== "/doctor" && <Navbar />}
       <main>
         <Routes>
           <Route path="/" element={<Home />} />

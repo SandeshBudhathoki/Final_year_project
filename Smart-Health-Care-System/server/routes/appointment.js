@@ -123,33 +123,46 @@ router.post("/", auth, async (req, res) => {
 
     await appointment.save();
 
-    // Enhanced email notifications
-    const user = await User.findById(req.user._id);
-    const doctorUser = await User.findOne({ email: doctor.contactInfo });
-    
-    const subject = "Appointment Booked - Smart Health Care System";
-    const userHtml = `
-      <h3>Appointment Confirmation</h3>
-      <p><strong>Doctor:</strong> Dr. ${doctor.name} (${doctor.category})</p>
-      <p><strong>Date:</strong> ${slot.date}</p>
-      <p><strong>Time:</strong> ${slot.startTime} - ${slot.endTime}</p>
-      <p><strong>Reason:</strong> ${reason || "General consultation"}</p>
-      <p><strong>Status:</strong> Pending confirmation</p>
-      <p>You will receive another email once the appointment is confirmed by the doctor.</p>
-    `;
-    
-    const doctorHtml = `
-      <h3>New Appointment Request</h3>
-      <p><strong>Patient:</strong> ${user.firstName} ${user.lastName}</p>
-      <p><strong>Email:</strong> ${user.email}</p>
-      <p><strong>Date:</strong> ${slot.date}</p>
-      <p><strong>Time:</strong> ${slot.startTime} - ${slot.endTime}</p>
-      <p><strong>Reason:</strong> ${reason || "General consultation"}</p>
-      <p>Please review and confirm this appointment.</p>
-    `;
+    // Enhanced email notifications - but don't fail if email fails
+    try {
+      const user = await User.findById(req.user._id);
+      const doctorUser = await User.findOne({ email: doctor.contactInfo });
+      
+      const subject = "Appointment Booked - Smart Health Care System";
+      const userHtml = `
+        <h3>Appointment Confirmation</h3>
+        <p><strong>Doctor:</strong> Dr. ${doctor.name} (${doctor.category})</p>
+        <p><strong>Date:</strong> ${slot.date}</p>
+        <p><strong>Time:</strong> ${slot.startTime} - ${slot.endTime}</p>
+        <p><strong>Reason:</strong> ${reason || "General consultation"}</p>
+        <p><strong>Status:</strong> Pending confirmation</p>
+        <p>You will receive another email once the appointment is confirmed by the doctor.</p>
+      `;
+      
+      const doctorHtml = `
+        <h3>New Appointment Request</h3>
+        <p><strong>Patient:</strong> ${user.firstName} ${user.lastName}</p>
+        <p><strong>Email:</strong> ${user.email}</p>
+        <p><strong>Date:</strong> ${slot.date}</p>
+        <p><strong>Time:</strong> ${slot.startTime} - ${slot.endTime}</p>
+        <p><strong>Reason:</strong> ${reason || "General consultation"}</p>
+        <p>Please review and confirm this appointment.</p>
+      `;
 
-    if (user?.email) sendEmail(user.email, subject, userHtml);
-    if (doctorUser?.email) sendEmail(doctorUser.email, subject, doctorHtml);
+      // Send emails but don't fail if they don't work
+      if (user?.email) {
+        sendEmail(user.email, subject, userHtml).catch(emailErr => {
+          console.log("Failed to send user email:", emailErr.message);
+        });
+      }
+      if (doctorUser?.email) {
+        sendEmail(doctorUser.email, subject, doctorHtml).catch(emailErr => {
+          console.log("Failed to send doctor email:", emailErr.message);
+        });
+      }
+    } catch (emailError) {
+      console.log("Email notification failed, but appointment was saved:", emailError.message);
+    }
 
     res.status(201).json({ 
       message: "Appointment booked successfully", 
@@ -361,23 +374,380 @@ router.patch("/:id/status", auth, async (req, res) => {
 
 // Legacy endpoints for backward compatibility
 router.patch("/:id/accept", auth, async (req, res) => {
-  req.body.status = 'confirmed';
-  return router.patch("/:id/status", auth, req, res);
+  try {
+    const { notes } = req.body;
+    const appointment = await Appointment.findById(req.params.id);
+    
+    if (!appointment) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    // Check if user is authorized to accept this appointment
+    if (req.user.role === "doctor" && appointment.doctorId.toString() !== req.user.doctorId?.toString()) {
+      return res.status(403).json({ message: "You can only accept your own appointments" });
+    }
+
+    // Validate status transition
+    if (!validateStatusTransition(appointment.status, 'confirmed')) {
+      return res.status(400).json({ 
+        message: `Cannot accept appointment with status: ${appointment.status}` 
+      });
+    }
+
+    appointment.status = 'confirmed';
+    if (notes) appointment.adminNotes = notes;
+    appointment.updatedAt = new Date();
+    appointment.confirmedAt = new Date();
+
+    // Handle doctor availability update
+    const doctor = await Doctor.findById(appointment.doctorId);
+    if (doctor) {
+      // Check if doctor has any other confirmed appointments
+      const confirmedAppointments = await Appointment.countDocuments({
+        doctorId: doctor._id,
+        status: 'confirmed',
+        _id: { $ne: appointment._id }
+      });
+      
+      if (confirmedAppointments === 0) {
+        // This is the first confirmed appointment, set doctor to busy
+        doctor.availabilityStatus = 'busy';
+        await doctor.save();
+        console.log(`Doctor ${doctor.name} availability updated to: busy`);
+      } else {
+        // Multiple confirmed appointments, set to booked
+        doctor.availabilityStatus = 'booked';
+        await doctor.save();
+        console.log(`Doctor ${doctor.name} availability updated to: booked`);
+      }
+    }
+
+    await appointment.save();
+
+    // Send confirmation notification
+    const user = await User.findById(appointment.userId);
+    if (user?.email) {
+      const subject = "Appointment Confirmed - Smart Health Care System";
+      const html = `
+        <h3>Appointment Confirmed</h3>
+        <p>Your appointment has been confirmed!</p>
+        <p><strong>Date:</strong> ${appointment.slot.date}</p>
+        <p><strong>Time:</strong> ${appointment.slot.startTime} - ${appointment.slot.endTime}</p>
+        <p>Please arrive 10 minutes before your scheduled time.</p>
+      `;
+      
+      sendEmail(user.email, subject, html).catch(emailErr => {
+        console.log("Failed to send confirmation email:", emailErr.message);
+      });
+    }
+
+    res.json({ 
+      message: "Appointment accepted successfully", 
+      appointment 
+    });
+  } catch (err) {
+    console.error("Error accepting appointment:", err);
+    res.status(500).json({ message: "Failed to accept appointment" });
+  }
 });
 
 router.patch("/:id/reject", auth, async (req, res) => {
-  req.body.status = 'rejected';
-  return router.patch("/:id/status", auth, req, res);
+  try {
+    const { notes } = req.body;
+    const appointment = await Appointment.findById(req.params.id);
+    
+    if (!appointment) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    // Check if user is authorized to reject this appointment
+    if (req.user.role === "doctor" && appointment.doctorId.toString() !== req.user.doctorId?.toString()) {
+      return res.status(403).json({ message: "You can only reject your own appointments" });
+    }
+
+    // Validate status transition
+    if (!validateStatusTransition(appointment.status, 'rejected')) {
+      return res.status(400).json({ 
+        message: `Cannot reject appointment with status: ${appointment.status}` 
+      });
+    }
+
+    appointment.status = 'rejected';
+    if (notes) appointment.adminNotes = notes;
+    appointment.updatedAt = new Date();
+    appointment.rejectedAt = new Date();
+
+    // Handle doctor availability update
+    const doctor = await Doctor.findById(appointment.doctorId);
+    if (doctor) {
+      // Check if doctor has any other confirmed appointments
+      const confirmedAppointments = await Appointment.countDocuments({
+        doctorId: doctor._id,
+        status: 'confirmed',
+        _id: { $ne: appointment._id }
+      });
+      
+      if (confirmedAppointments === 0) {
+        // No more confirmed appointments, set doctor to available
+        doctor.availabilityStatus = 'available';
+        await doctor.save();
+        console.log(`Doctor ${doctor.name} availability updated to: available`);
+      } else if (confirmedAppointments === 1) {
+        // Only one confirmed appointment left, set to busy
+        doctor.availabilityStatus = 'busy';
+        await doctor.save();
+        console.log(`Doctor ${doctor.name} availability updated to: busy`);
+      }
+    }
+
+    await appointment.save();
+
+    // Send rejection notification
+    const user = await User.findById(appointment.userId);
+    if (user?.email) {
+      const subject = "Appointment Rejected - Smart Health Care System";
+      const html = `
+        <h3>Appointment Rejected</h3>
+        <p>Your appointment has been rejected.</p>
+        <p><strong>Date:</strong> ${appointment.slot.date}</p>
+        <p><strong>Time:</strong> ${appointment.slot.startTime} - ${appointment.slot.endTime}</p>
+        <p>Please contact us to reschedule or for more information.</p>
+      `;
+      
+      sendEmail(user.email, subject, html).catch(emailErr => {
+        console.log("Failed to send rejection email:", emailErr.message);
+      });
+    }
+
+    res.json({ 
+      message: "Appointment rejected successfully", 
+      appointment 
+    });
+  } catch (err) {
+    console.error("Error rejecting appointment:", err);
+    res.status(500).json({ message: "Failed to reject appointment" });
+  }
+});
+
+// Start appointment (mark as in progress)
+router.patch("/:id/start", auth, async (req, res) => {
+  try {
+    const { notes } = req.body;
+    const appointment = await Appointment.findById(req.params.id);
+    
+    if (!appointment) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    // Check if user is authorized to start this appointment
+    if (req.user.role === "doctor" && appointment.doctorId.toString() !== req.user.doctorId?.toString()) {
+      return res.status(403).json({ message: "You can only start your own appointments" });
+    }
+
+    // Validate status transition
+    if (!validateStatusTransition(appointment.status, 'in_progress')) {
+      return res.status(400).json({ 
+        message: `Cannot start appointment with status: ${appointment.status}` 
+      });
+    }
+
+    appointment.status = 'in_progress';
+    if (notes) appointment.adminNotes = notes;
+    appointment.updatedAt = new Date();
+    appointment.startedAt = new Date();
+
+    // Handle doctor availability update
+    const doctor = await Doctor.findById(appointment.doctorId);
+    if (doctor) {
+      // When appointment starts, doctor should be busy
+      doctor.availabilityStatus = 'busy';
+      await doctor.save();
+      console.log(`Doctor ${doctor.name} availability updated to: busy (appointment started)`);
+    }
+
+    await appointment.save();
+
+    // Send start notification
+    const user = await User.findById(appointment.userId);
+    if (user?.email) {
+      const subject = "Appointment Started - Smart Health Care System";
+      const html = `
+        <h3>Appointment Started</h3>
+        <p>Your appointment has started.</p>
+        <p><strong>Date:</strong> ${appointment.slot.date}</p>
+        <p><strong>Time:</strong> ${appointment.slot.startTime} - ${appointment.slot.endTime}</p>
+        <p>Please proceed to your appointment location.</p>
+      `;
+      
+      sendEmail(user.email, subject, html).catch(emailErr => {
+        console.log("Failed to send start email:", emailErr.message);
+      });
+    }
+
+    res.json({ 
+      message: "Appointment started successfully", 
+      appointment 
+    });
+  } catch (err) {
+    console.error("Error starting appointment:", err);
+    res.status(500).json({ message: "Failed to start appointment" });
+  }
 });
 
 router.patch("/:id/complete", auth, async (req, res) => {
-  req.body.status = 'completed';
-  return router.patch("/:id/status", auth, req, res);
+  try {
+    const { notes } = req.body;
+    const appointment = await Appointment.findById(req.params.id);
+    
+    if (!appointment) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    // Check if user is authorized to complete this appointment
+    if (req.user.role === "doctor" && appointment.doctorId.toString() !== req.user.doctorId?.toString()) {
+      return res.status(403).json({ message: "You can only complete your own appointments" });
+    }
+
+    // Validate status transition
+    if (!validateStatusTransition(appointment.status, 'completed')) {
+      return res.status(400).json({ 
+        message: `Cannot complete appointment with status: ${appointment.status}` 
+      });
+    }
+
+    appointment.status = 'completed';
+    if (notes) appointment.adminNotes = notes;
+    appointment.updatedAt = new Date();
+    appointment.completedAt = new Date();
+
+    // Handle doctor availability update
+    const doctor = await Doctor.findById(appointment.doctorId);
+    if (doctor) {
+      // Check if doctor has any other confirmed appointments
+      const confirmedAppointments = await Appointment.countDocuments({
+        doctorId: doctor._id,
+        status: 'confirmed',
+        _id: { $ne: appointment._id }
+      });
+      
+      if (confirmedAppointments === 0) {
+        // No more confirmed appointments, set doctor to available
+        doctor.availabilityStatus = 'available';
+        await doctor.save();
+        console.log(`Doctor ${doctor.name} availability updated to: available`);
+      } else if (confirmedAppointments === 1) {
+        // Only one confirmed appointment left, set to busy
+        doctor.availabilityStatus = 'busy';
+        await doctor.save();
+        console.log(`Doctor ${doctor.name} availability updated to: busy`);
+      }
+    }
+
+    await appointment.save();
+
+    // Send completion notification
+    const user = await User.findById(appointment.userId);
+    if (user?.email) {
+      const subject = "Appointment Completed - Smart Health Care System";
+      const html = `
+        <h3>Appointment Completed</h3>
+        <p>Your appointment has been marked as completed.</p>
+        <p><strong>Date:</strong> ${appointment.slot.date}</p>
+        <p><strong>Time:</strong> ${appointment.slot.startTime} - ${appointment.slot.endTime}</p>
+        <p>Thank you for using our service!</p>
+      `;
+      
+      sendEmail(user.email, subject, html).catch(emailErr => {
+        console.log("Failed to send completion email:", emailErr.message);
+      });
+    }
+
+    res.json({ 
+      message: "Appointment completed successfully", 
+      appointment 
+    });
+  } catch (err) {
+    console.error("Error completing appointment:", err);
+    res.status(500).json({ message: "Failed to complete appointment" });
+  }
 });
 
 router.patch("/:id/cancel", auth, async (req, res) => {
-  req.body.status = 'cancelled';
-  return router.patch("/:id/status", auth, req, res);
+  try {
+    const { notes } = req.body;
+    const appointment = await Appointment.findById(req.params.id);
+    
+    if (!appointment) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    // Check if user is authorized to cancel this appointment
+    if (req.user.role === "doctor" && appointment.doctorId.toString() !== req.user.doctorId?.toString()) {
+      return res.status(403).json({ message: "You can only cancel your own appointments" });
+    }
+
+    // Validate status transition
+    if (!validateStatusTransition(appointment.status, 'cancelled')) {
+      return res.status(400).json({ 
+        message: `Cannot cancel appointment with status: ${appointment.status}` 
+      });
+    }
+
+    appointment.status = 'cancelled';
+    if (notes) appointment.adminNotes = notes;
+    appointment.updatedAt = new Date();
+    appointment.cancelledAt = new Date();
+
+    // Handle doctor availability update
+    const doctor = await Doctor.findById(appointment.doctorId);
+    if (doctor) {
+      // Check if doctor has any other confirmed appointments
+      const confirmedAppointments = await Appointment.countDocuments({
+        doctorId: doctor._id,
+        status: 'confirmed',
+        _id: { $ne: appointment._id }
+      });
+      
+      if (confirmedAppointments === 0) {
+        // No more confirmed appointments, set doctor to available
+        doctor.availabilityStatus = 'available';
+        await doctor.save();
+        console.log(`Doctor ${doctor.name} availability updated to: available`);
+      } else if (confirmedAppointments === 1) {
+        // Only one confirmed appointment left, set to busy
+        doctor.availabilityStatus = 'busy';
+        await doctor.save();
+        console.log(`Doctor ${doctor.name} availability updated to: busy`);
+      }
+    }
+
+    await appointment.save();
+
+    // Send cancellation notification
+    const user = await User.findById(appointment.userId);
+    if (user?.email) {
+      const subject = "Appointment Cancelled - Smart Health Care System";
+      const html = `
+        <h3>Appointment Cancelled</h3>
+        <p>Your appointment has been cancelled.</p>
+        <p><strong>Date:</strong> ${appointment.slot.date}</p>
+        <p><strong>Time:</strong> ${appointment.slot.startTime} - ${appointment.slot.endTime}</p>
+        <p>Please contact us if you need to reschedule.</p>
+      `;
+      
+      sendEmail(user.email, subject, html).catch(emailErr => {
+        console.log("Failed to send cancellation email:", emailErr.message);
+      });
+    }
+
+    res.json({ 
+      message: "Appointment cancelled successfully", 
+      appointment 
+    });
+  } catch (err) {
+    console.error("Error cancelling appointment:", err);
+    res.status(500).json({ message: "Failed to cancel appointment" });
+  }
 });
 
 // Enhanced appointment analytics
@@ -504,15 +874,44 @@ router.get("/admin/all", auth, async (req, res) => {
 // Get appointments for a specific doctor
 router.get("/doctor/my", auth, async (req, res) => {
   try {
+    console.log("Getting appointments for doctor user:", req.user._id, "Role:", req.user.role, "DoctorId:", req.user.doctorId);
+    
+    // If user is not a doctor or doesn't have doctorId, return empty appointments
+    if (req.user.role !== "doctor" || !req.user.doctorId) {
+      console.log("User not set up as doctor, returning empty appointments");
+      return res.json({ 
+        appointments: [],
+        pagination: {
+          page: 1,
+          limit: 20,
+          total: 0,
+          pages: 0
+        },
+        message: "Complete doctor profile setup to see appointments"
+      });
+    }
+    
     const { status, date, page = 1, limit = 20 } = req.query;
     
-    // Find doctor by user's email
+    // Find doctor by user's doctorId reference
     const Doctor = require("../models/Doctor");
-    const doctor = await Doctor.findOne({ contactInfo: req.user.email });
+    const doctor = await Doctor.findById(req.user.doctorId);
     
     if (!doctor) {
-      return res.status(404).json({ message: "Doctor not found for this user" });
+      console.log("Doctor not found for doctorId:", req.user.doctorId);
+      return res.json({ 
+        appointments: [],
+        pagination: {
+          page: 1,
+          limit: 20,
+          total: 0,
+          pages: 0
+        },
+        message: "Doctor profile not found"
+      });
     }
+    
+    console.log("Found doctor for appointments:", doctor.name);
     
     let query = { doctorId: doctor._id };
     
@@ -530,6 +929,7 @@ router.get("/doctor/my", auth, async (req, res) => {
 
     const total = await Appointment.countDocuments(query);
 
+    console.log(`Found ${appointments.length} appointments for doctor ${doctor.name}`);
     res.json({ 
       appointments, 
       pagination: {
@@ -540,6 +940,7 @@ router.get("/doctor/my", auth, async (req, res) => {
       }
     });
   } catch (err) {
+    console.error("Error in /doctor/my:", err);
     res.status(500).json({ message: "Failed to fetch doctor appointments" });
   }
 });
@@ -547,15 +948,44 @@ router.get("/doctor/my", auth, async (req, res) => {
 // Get appointment history for a specific doctor
 router.get("/doctor/history", auth, async (req, res) => {
   try {
+    console.log("Getting appointment history for doctor user:", req.user._id, "Role:", req.user.role, "DoctorId:", req.user.doctorId);
+    
+    // If user is not a doctor or doesn't have doctorId, return empty history
+    if (req.user.role !== "doctor" || !req.user.doctorId) {
+      console.log("User not set up as doctor, returning empty history");
+      return res.json({ 
+        appointments: [],
+        pagination: {
+          page: 1,
+          limit: 20,
+          total: 0,
+          pages: 0
+        },
+        message: "Complete doctor profile setup to see appointment history"
+      });
+    }
+    
     const { status, date, page = 1, limit = 20 } = req.query;
     
-    // Find doctor by user's email
+    // Find doctor by user's doctorId reference
     const Doctor = require("../models/Doctor");
-    const doctor = await Doctor.findOne({ contactInfo: req.user.email });
+    const doctor = await Doctor.findById(req.user.doctorId);
     
     if (!doctor) {
-      return res.status(404).json({ message: "Doctor not found for this user" });
+      console.log("Doctor not found for doctorId:", req.user.doctorId);
+      return res.json({ 
+        appointments: [],
+        pagination: {
+          page: 1,
+          limit: 20,
+          total: 0,
+          pages: 0
+        },
+        message: "Doctor profile not found"
+      });
     }
+    
+    console.log("Found doctor for history:", doctor.name);
     
     let query = { 
       doctorId: doctor._id,
@@ -570,12 +1000,13 @@ router.get("/doctor/history", auth, async (req, res) => {
     
     const appointments = await Appointment.find(query)
       .populate("userId", "firstName lastName email")
-      .sort({ 'slot.date': -1, 'slot.startTime': -1 })
+      .sort({ 'slot.date': 1, 'slot.startTime': 1 })
       .skip(skip)
       .limit(parseInt(limit));
 
     const total = await Appointment.countDocuments(query);
 
+    console.log(`Found ${appointments.length} history items for doctor ${doctor.name}`);
     res.json({ 
       appointments, 
       pagination: {
@@ -586,54 +1017,8 @@ router.get("/doctor/history", auth, async (req, res) => {
       }
     });
   } catch (err) {
+    console.error("Error in /doctor/history:", err);
     res.status(500).json({ message: "Failed to fetch doctor appointment history" });
-  }
-});
-
-// Start appointment (doctor marks appointment as in progress)
-router.patch("/:id/start", auth, async (req, res) => {
-  try {
-    const appointment = await Appointment.findById(req.params.id);
-    
-    if (!appointment) {
-      return res.status(404).json({ message: "Appointment not found" });
-    }
-
-    // Find doctor by user's email
-    const Doctor = require("../models/Doctor");
-    const doctor = await Doctor.findOne({ contactInfo: req.user.email });
-    
-    if (!doctor) {
-      return res.status(404).json({ message: "Doctor not found for this user" });
-    }
-
-    // Check if doctor owns this appointment
-    if (appointment.doctorId.toString() !== doctor._id.toString()) {
-      return res.status(403).json({ message: "Not authorized to manage this appointment" });
-    }
-
-    if (appointment.status !== 'confirmed') {
-      return res.status(400).json({ message: "Only confirmed appointments can be started" });
-    }
-
-    appointment.status = 'in_progress';
-    appointment.updatedAt = new Date();
-    await appointment.save();
-
-    // Update doctor availability to busy
-    if (doctor) {
-      doctor.availabilityStatus = 'busy';
-      doctor.currentPatientId = appointment.userId;
-      doctor.lastStatusUpdate = new Date();
-      await doctor.save();
-    }
-
-    res.json({ 
-      message: "Appointment started successfully", 
-      appointment 
-    });
-  } catch (err) {
-    res.status(500).json({ message: "Failed to start appointment" });
   }
 });
 

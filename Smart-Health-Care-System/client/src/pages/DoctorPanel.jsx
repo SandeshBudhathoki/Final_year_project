@@ -6,7 +6,11 @@ import {
   FaHistory,
   FaUser,
   FaPlay,
-  FaEye
+  FaEye,
+  FaEdit,
+  FaCheckCircle,
+  FaTimesCircle,
+  FaClock
 } from "react-icons/fa";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import { useNavigate } from "react-router-dom";
@@ -17,8 +21,8 @@ import "./DoctorPanel.css";
 const menuItems = [
   { name: "Dashboard", icon: <FaTachometerAlt /> },
   { name: "Appointments", icon: <FaCalendarAlt /> },
-  { name: "Availability", icon: <FaUser Md /> },
-  { name: "Profile", icon: <FaUser  /> },
+  { name: "Availability", icon: <FaUserMd /> },
+  { name: "Profile", icon: <FaUser /> },
   { name: "History", icon: <FaHistory /> },
 ];
 
@@ -26,6 +30,7 @@ export default function DoctorPanel() {
   const [active, setActive] = useState("Dashboard");
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [stats, setStats] = useState(null);
   const [availabilityStatus, setAvailabilityStatus] = useState("available");
   const [statusNotes, setStatusNotes] = useState("");
@@ -43,34 +48,100 @@ export default function DoctorPanel() {
     experience: "",
     expertise: "",
     fee: "",
-    contactInfo: ""
+    contactInfo: "",
+    photo: ""
   });
+  const [objectUrl, setObjectUrl] = useState(null);
   const { logout } = useAuth();
   const navigate = useNavigate();
 
+  // Cleanup object URL when component unmounts or photo changes
   useEffect(() => {
-    const fetchData = async () => {
-      const token = localStorage.getItem("token");
-      const headers = { headers: { Authorization: `Bearer ${token}` } };
+    return () => {
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [objectUrl]);
 
+  // Fetch data based on active tab
+  useEffect(() => {
       if (active === "Dashboard") {
-        const res = await fetch("/api/doctors/me/stats", headers);
-        if (res.ok) setStats(await res.json());
+      setLoading(true);
+      setError(null);
+      fetch("/api/doctors/me/stats", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error("Failed to fetch stats");
+          return res.json();
+        })
+        .then((data) => {
+          setStats(data);
+          setLoading(false);
+        })
+        .catch((err) => {
+          setError(err.message);
+          setLoading(false);
+        });
+      
+      // Also fetch availability for dashboard
         fetchAvailability();
       } else if (active === "Appointments") {
         setLoading(true);
-        const res = await fetch("/api/appointments/doctor/my", headers);
-        if (res.ok) setAppointments((await res.json()).appointments || []);
+      setError(null);
+      fetch("/api/appointments/doctor/my", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error("Failed to fetch appointments");
+          return res.json();
+        })
+        .then((data) => {
+          setAppointments(data.appointments || []);
         setLoading(false);
+        })
+        .catch((err) => {
+          setError(err.message);
+          setLoading(false);
+        });
       } else if (active === "History") {
         setHistoryLoading(true);
-        const res = await fetch("/api/appointments/doctor/history", headers);
-        if (res.ok) setAppointmentHistory((await res.json()).appointments || []);
+      setError(null);
+      fetch("/api/appointments/doctor/history", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error("Failed to fetch appointment history");
+          return res.json();
+        })
+        .then((data) => {
+          setAppointmentHistory(data.appointments || []);
         setHistoryLoading(false);
+        })
+        .catch((err) => {
+          setError(err.message);
+          setHistoryLoading(false);
+        });
       } else if (active === "Profile") {
-        const res = await fetch("/api/doctors/me/profile", headers);
-        if (res.ok) {
-          const data = await res.json();
+      setLoading(true);
+      setError(null);
+      fetch("/api/doctors/me/profile", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error("Failed to fetch doctor profile");
+          return res.json();
+        })
+        .then((data) => {
           setDoctorInfo(data.doctor);
           setProfileForm({
             name: data.doctor.name || "",
@@ -79,18 +150,22 @@ export default function DoctorPanel() {
             experience: data.doctor.experience || "",
             expertise: data.doctor.expertise || "",
             fee: data.doctor.fee || "",
-            contactInfo: data.doctor.contactInfo || ""
+            contactInfo: data.doctor.contactInfo || "",
+            photo: data.doctor.photo || ""
           });
-        }
-      }
-    };
-    fetchData();
+          setLoading(false);
+        })
+        .catch((err) => {
+          setError(err.message);
+          setLoading(false);
+        });
+    }
   }, [active]);
 
   const fetchAvailability = async () => {
-    const token = localStorage.getItem("token");
+    try {
     const res = await fetch("/api/doctors/me/availability", {
-      headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
     });
     if (res.ok) {
       const data = await res.json();
@@ -99,65 +174,158 @@ export default function DoctorPanel() {
         setStatusNotes(data.doctor.statusNotes || "");
         setDoctorInfo(data.doctor);
       }
+      }
+    } catch (error) {
+      console.error("Error fetching availability:", error);
     }
   };
 
   const handleStatusUpdate = async () => {
-    const token = localStorage.getItem("token");
+    try {
+      console.log("=== STATUS UPDATE DEBUG ===");
+      console.log("Current user from localStorage:", JSON.parse(localStorage.getItem("user") || "{}"));
+      console.log("Updating status to:", availabilityStatus, "Notes:", statusNotes);
+      console.log("Request body:", { availabilityStatus, statusNotes });
+      
     const res = await fetch("/api/doctors/me/availability", {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
       },
       body: JSON.stringify({ availabilityStatus, statusNotes }),
     });
+      
+      console.log("Response status:", res.status);
+      console.log("Response headers:", Object.fromEntries(res.headers.entries()));
+      
     if (res.ok) {
-      toast.success(`Status updated to ${availabilityStatus}`);
+        const data = await res.json();
+        console.log("Success response:", data);
+        toast.success(data.message || `Status updated to ${availabilityStatus}`);
       fetchAvailability();
     } else {
+        const errorData = await res.json();
+        console.error("Status update failed:", errorData);
+        toast.error(errorData.message || "Error updating status");
+      }
+    } catch (error) {
+      console.error("Error updating status:", error);
       toast.error("Error updating status");
     }
   };
 
   const handleAppointmentAction = async (appointmentId, action) => {
-    const token = localStorage.getItem("token");
-    const res = await fetch(`/api/appointments/${appointmentId}/${action}`, {
+    try {
+      let endpoint = `/api/appointments/${appointmentId}`;
+      let body = {};
+      
+      // Map actions to correct endpoints and body data
+      switch (action) {
+        case 'start':
+          endpoint += '/start';
+          body = { status: 'in_progress' };
+          break;
+        case 'complete':
+          endpoint += '/complete';
+          body = {};
+          break;
+        case 'cancel':
+          endpoint += '/cancel';
+          body = {};
+          break;
+        case 'accept':
+          endpoint += '/accept';
+          body = {};
+          break;
+        case 'reject':
+          endpoint += '/reject';
+          body = {};
+          break;
+        default:
+          // For other actions, use the generic status update
+          endpoint += '/status';
+          body = { status: action };
+      }
+      
+      const res = await fetch(endpoint, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
       },
+        body: JSON.stringify(body),
     });
+      
     if (res.ok) {
-      setAppointments(prev => prev.map(app => 
-        app._id === appointmentId 
-          ? { ...app, status: action === 'start' ? 'in_progress' : 'completed' }
-          : app
-      ));
-      toast.success(`Appointment ${action}ed successfully`);
+        toast.success(`Appointment ${action} successfully`);
+        // Refresh appointments
+        setActive("Appointments");
     } else {
-      toast.error(`Error ${action}ing appointment`);
+        const errorData = await res.json();
+        toast.error(errorData.message || `Failed to ${action} appointment`);
+      }
+    } catch (error) {
+      console.error(`Error ${action}ing appointment:`, error);
+      toast.error(`Failed to ${action} appointment`);
     }
   };
 
   const handleProfileUpdate = async (e) => {
     e.preventDefault();
-    const token = localStorage.getItem("token");
+    try {
+      // Create FormData for file upload
+      const formData = new FormData();
+      formData.append("name", profileForm.name);
+      formData.append("category", profileForm.category);
+      formData.append("qualifications", profileForm.qualifications);
+      formData.append("experience", profileForm.experience);
+      formData.append("expertise", profileForm.expertise);
+      formData.append("fee", profileForm.fee);
+      formData.append("contactInfo", profileForm.contactInfo);
+      
+      // Add photo if it's a file
+      if (profileForm.photo instanceof File) {
+        console.log("Adding photo to FormData:", profileForm.photo.name, profileForm.photo.size, profileForm.photo.type);
+        formData.append("photo", profileForm.photo);
+      } else {
+        console.log("No photo file to upload");
+      }
+
+      console.log("FormData contents:");
+      for (let [key, value] of formData.entries()) {
+        console.log(key, ":", value);
+      }
+
     const res = await fetch("/api/doctors/me/profile", {
       method: "PUT",
       headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
       },
-      body: JSON.stringify(profileForm),
+        body: formData, // Use FormData instead of JSON
     });
+      
     if (res.ok) {
       toast.success("Profile updated successfully");
       setEditProfile(false);
-      fetchDoctorProfile();
+        setActive("Profile"); // Refresh profile data
     } else {
-      toast.error("Error updating profile");
+        const errorData = await res.json();
+        console.error("Profile update failed:", errorData);
+        const errorMessage = errorData.message || errorData.error || "Error updating profile";
+        toast.error(errorMessage);
+      }
+    } catch (error) {
+      console.error("Profile update error:", error);
+      let errorMessage = "Error updating profile";
+      
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (error.name === "TypeError" && error.message.includes("fetch")) {
+        errorMessage = "Network error. Please check your connection.";
+      }
+      
+      toast.error(errorMessage);
     }
   };
 
@@ -186,6 +354,23 @@ export default function DoctorPanel() {
     const dateMatch = filterDate === "" || (app.slot?.date && app.slot.date === filterDate);
     return statusMatch && dateMatch;
   });
+
+  if (loading) {
+    return (
+      <div className="admin-panel-container">
+        <div style={{ 
+          display: "flex", 
+          justifyContent: "center", 
+          alignItems: "center", 
+          width: "100%",
+          fontSize: "1.2rem",
+          color: "#64748b"
+        }}>
+          Loading...
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="admin-panel-container">
@@ -220,7 +405,21 @@ export default function DoctorPanel() {
       </aside>
 
       <main className="admin-main-content">
+        
         <h2>{active}</h2>
+        
+        {error && (
+          <div style={{ 
+            background: "#fef2f2", 
+            color: "#dc2626", 
+            padding: "1rem", 
+            borderRadius: "8px", 
+            marginBottom: "2rem",
+            border: "1px solid #fecaca"
+          }}>
+            {error}
+          </div>
+        )}
         
         {active === "Dashboard" && (
           <div>
@@ -317,14 +516,14 @@ export default function DoctorPanel() {
                     onClick={() => setActive("Availability")}
                     className="admin-action-btn"
                   >
-                    <FaUser Md color="#3b82f6" />
+                    <FaUserMd color="#3b82f6" />
                     Update Availability
                   </button>
                   <button
                     onClick={() => setActive("Profile")}
                     className="admin-action-btn"
                   >
-                    <FaUser  color="#3b82f6" />
+                    <FaUser color="#3b82f6" />
                     Edit Profile
                   </button>
                 </div>
@@ -336,23 +535,25 @@ export default function DoctorPanel() {
         {active === "Appointments" && (
           <div>
             <div style={{ 
-              display: "flex", 
-              gap: "1rem", 
-              marginBottom: "1rem", 
-              alignItems: "center",
-              flexWrap: "wrap"
+              background: "#fff", 
+              padding: "1.5rem", 
+              borderRadius: "12px", 
+              marginBottom: "2rem",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.03)"
             }}>
-              <input
-                type="text"
-                placeholder="Search patient..."
-                className="admin-search-input"
-              />
+              <h3 style={{ marginBottom: "1rem", color: "#1e293b" }}>Filters</h3>
+              <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="admin-filter-select"
+                  style={{
+                    padding: "0.5rem",
+                    borderRadius: "6px",
+                    border: "1px solid #d1d5db",
+                    background: "#fff"
+                  }}
               >
-                <option value="">All Statuses</option>
+                  <option value="">All Status</option>
                 <option value="pending">Pending</option>
                 <option value="confirmed">Confirmed</option>
                 <option value="in_progress">In Progress</option>
@@ -363,27 +564,22 @@ export default function DoctorPanel() {
                 type="date"
                 value={filterDate}
                 onChange={(e) => setFilterDate(e.target.value)}
-                className="admin-filter-input"
-              />
-              <button
-                onClick={() => {
-                  setFilterStatus("");
-                  setFilterDate("");
-                }}
-                className="admin-clear-btn"
-              >
-                Clear
-              </button>
+                  style={{
+                    padding: "0.5rem",
+                    borderRadius: "6px",
+                    border: "1px solid #d1d5db",
+                    background: "#fff"
+                  }}
+                />
+              </div>
             </div>
 
-            {loading && <p>Loading appointments...</p>}
-            {!loading && (
+            <div className="admin-table-container">
               <table className="admin-table">
                 <thead>
                   <tr>
                     <th>Patient</th>
                     <th>Date & Time</th>
-                    <th>Reason</th>
                     <th>Status</th>
                     <th>Actions</th>
                   </tr>
@@ -397,98 +593,130 @@ export default function DoctorPanel() {
                             {app.userId ? `${app.userId.firstName} ${app.userId.lastName}` : "Unknown"}
                           </div>
                           <div style={{ fontSize: "0.9rem", color: "#64748b" }}>
-                            {app.userId?.email || "N/A"}
+                            {app.userId?.email}
                           </div>
                         </div>
                       </td>
                       <td>
                         <div>
-                          <div style={{ fontWeight: "500" }}>
-                            {app.slot?.date || "N/A"}
-                          </div>
+                          <div>{app.slot?.date}</div>
                           <div style={{ fontSize: "0.9rem", color: "#64748b" }}>
-                            {app.slot?.startTime}-{app.slot?.endTime}
+                            {app.slot?.startTime} - {app.slot?.endTime}
                           </div>
                         </div>
                       </td>
-                      <td>{app.reason || "-"}</td>
-                      <td style={{ color: getStatusColor(app.status), fontWeight: 500 }}>{app.status}</td>
-                      <td style={{ display: "flex", gap: "0.5rem" }}>
-                        {app.status === 'confirmed' && (
+                      <td>
+                        <span style={{ 
+                          color: getStatusColor(app.status), 
+                          fontWeight: "500",
+                          textTransform: "capitalize"
+                        }}>
+                          {app.status.replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ display: "flex", gap: "0.5rem" }}>
+                          {app.status === "confirmed" && (
                           <button
-                            title="Start Appointment"
-                            onClick={() => handleAppointmentAction(app._id, 'start')}
-                            className="admin-action-btn"
+                              onClick={() => handleAppointmentAction(app._id, "start")}
+                              style={{
+                                background: "#3b82f6",
+                                color: "white",
+                                border: "none",
+                                padding: "0.25rem 0.5rem",
+                                borderRadius: "4px",
+                                cursor: "pointer",
+                                fontSize: "0.8rem"
+                              }}
                           >
-                            <FaPlay />
+                              <FaPlay size={12} />
                           </button>
                         )}
-                        {app.status === 'in_progress' && (
+                          {app.status === "in_progress" && (
                           <button
-                            title="Complete Appointment"
-                            onClick={() => handleAppointmentAction(app._id, 'complete')}
-                            className="admin-action-btn"
+                              onClick={() => handleAppointmentAction(app._id, "complete")}
+                              style={{
+                                background: "#22c55e",
+                                color: "white",
+                                border: "none",
+                                padding: "0.25rem 0.5rem",
+                                borderRadius: "4px",
+                                cursor: "pointer",
+                                fontSize: "0.8rem"
+                              }}
                           >
-                            <FaCheck />
+                              <FaCheckCircle size={12} />
                           </button>
                         )}
                         <button
-                          title="View Details"
                           onClick={() => setViewAppointment(app)}
-                          className="admin-action-btn"
+                            style={{
+                              background: "#6b7280",
+                              color: "white",
+                              border: "none",
+                              padding: "0.25rem 0.5rem",
+                              borderRadius: "4px",
+                              cursor: "pointer",
+                              fontSize: "0.8rem"
+                            }}
                         >
-                          <FaEye />
+                            <FaEye size={12} />
                         </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            )}
-            {filteredAppointments.length === 0 && !loading && (
-              <div style={{ textAlign: "center", color: "#6b7280", marginTop: "2rem" }}>
-                No appointments found matching the filters.
+              {filteredAppointments.length === 0 && (
+                <div style={{ 
+                  padding: "2rem", 
+                  textAlign: "center", 
+                  color: "#64748b",
+                  background: "#fff",
+                  borderRadius: "8px"
+                }}>
+                  No appointments found
               </div>
             )}
+            </div>
           </div>
         )}
 
         {active === "Availability" && (
           <div>
             <div style={{ 
-              background: "#f8fafc", 
+              background: "#fff", 
               padding: "2rem", 
               borderRadius: "12px", 
-              marginBottom: "2rem",
-              border: "1px solid #e2e8f0"
+              boxShadow: "0 2px 8px rgba(0,0,0,0.03)"
             }}>
               <h3 style={{ marginBottom: "1.5rem", color: "#1e293b" }}>Update Availability Status</h3>
-              
-              <div style={{ marginBottom: "1.5rem" }}>
-                <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500, color: "#374151" }}>
-                  Current Status:
+              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <div>
+                  <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "500" }}>
+                    Status
                 </label>
-                <div style={{ display: "flex", gap: "1rem", marginBottom: "1rem", flexWrap: "wrap" }}>
-                  {["available", "busy", "offline"].map(status => (
-                    <label key={status} style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
-                      <input
-                        type="radio"
-                        name="availability"
-                        value={status}
-                        checked={availabilityStatus === status}
-                        onChange={() => setAvailabilityStatus(status)}
-                      />
-                      <span style={{ color: status === "available" ? '#22c55e' : status === "busy" ? '#f59e42' : '#6b7280', fontWeight: "500" }}>
-                        {status.charAt(0).toUpperCase() + status.slice(1)}
-                      </span>
-                    </label>
-                  ))}
+                  <select
+                    value={availabilityStatus}
+                    onChange={(e) => setAvailabilityStatus(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "0.75rem",
+                      borderRadius: "6px",
+                      border: "1px solid #d1d5db",
+                      background: "#fff"
+                    }}
+                  >
+                    <option value="available">Available</option>
+                    <option value="busy">Busy</option>
+                    <option value="offline">Offline</option>
+                    <option value="booked">Booked</option>
+                  </select>
                 </div>
-              </div>
-
-              <div style={{ marginBottom: "1.5rem" }}>
-                <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500, color: "#374151" }}>
-                  Status Notes (Optional):
+                <div>
+                  <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "500" }}>
+                    Notes (Optional)
                 </label>
                 <textarea
                   value={statusNotes}
@@ -498,236 +726,387 @@ export default function DoctorPanel() {
                     width: "100%",
                     padding: "0.75rem",
                     borderRadius: "6px",
-                    border: "1px solid #cbd5e1",
-                    minHeight: "80px",
-                    resize: "vertical",
-                    fontFamily: "inherit"
+                      border: "1px solid #d1d5db",
+                      background: "#fff",
+                      minHeight: "100px",
+                      resize: "vertical"
                   }}
                 />
               </div>
-
               <button
                 onClick={handleStatusUpdate}
                 style={{
+                    background: "#3b82f6",
+                    color: "white",
+                    border: "none",
                   padding: "0.75rem 1.5rem",
                   borderRadius: "6px",
-                  border: "none",
-                  background: "#2563eb",
-                  color: "#fff",
-                  fontWeight: 600,
+                    fontWeight: "600",
                   cursor: "pointer",
-                  fontSize: "1rem"
+                    alignSelf: "flex-start"
                 }}
               >
                 Update Status
               </button>
             </div>
-
-            {doctorInfo && (
-              <div style={{ 
-                background: "#fff", 
-                padding: "1.5rem", 
-                borderRadius: "12px",
-                border: "1px solid #e2e8f0"
-              }}>
-                <h3 style={{ marginBottom: "1rem", color: "#1e293b" }}>Current Status</h3>
-                <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
-                  <div style={{ 
-                    padding: "0.5rem 1rem",
-                    borderRadius: "6px",
-                    background: availabilityStatus === 'available' ? '#dcfce7' : 
-                               availabilityStatus === 'busy' ? '#fef3c7' : '#f3f4f6',
-                    color: availabilityStatus === 'available' ? '#166534' : 
-                           availabilityStatus === 'busy' ? '#92400e' : '#374151',
-                    fontWeight: "600"
-                  }}>
-                    {availabilityStatus.toUpperCase()}
                   </div>
-                  {statusNotes && (
-                    <span style={{ color: "#64748b" }}>
-                      {statusNotes}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
           </div>
         )}
 
         {active === "Profile" && (
           <div>
-            {doctorInfo ? (
+            {editProfile ? (
               <div style={{ 
                 background: "#fff", 
                 padding: "2rem", 
                 borderRadius: "12px",
-                border: "1px solid #e2e8f0"
+                boxShadow: "0 2px 8px rgba(0,0,0,0.03)"
               }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem" }}>
-                  <h3 style={{ color: "#1e293b" }}>Doctor Profile</h3>
-                  <button
-                    onClick={() => setEditProfile(!editProfile)}
+                <h3 style={{ marginBottom: "1.5rem", color: "#1e293b" }}>Edit Profile</h3>
+                <form onSubmit={handleProfileUpdate}>
+                  {/* Profile Picture Section */}
+                  <div style={{ marginBottom: "2rem", textAlign: "center" }}>
+                    <div style={{ marginBottom: "1rem" }}>
+                      <div style={{
+                        width: "120px",
+                        height: "120px",
+                        borderRadius: "50%",
+                        margin: "0 auto 1rem",
+                        overflow: "hidden",
+                        border: "3px solid #e5e7eb",
+                        position: "relative"
+                      }}>
+                        <img
+                          src={
+                            profileForm.photo instanceof File 
+                              ? objectUrl
+                              : profileForm.photo || ""
+                          }
+                          alt="Profile"
                     style={{
-                      padding: "0.5rem 1rem",
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover"
+                          }}
+                          onError={(e) => {
+                            e.target.style.display = "none";
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "500" }}>
+                        Profile Picture
+                      </label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files[0];
+                          if (file) {
+                            // Validate file size (2MB)
+                            if (file.size > 2 * 1024 * 1024) {
+                              toast.error("File size must be less than 2MB");
+                              return;
+                            }
+                            // Validate file type
+                            if (!file.type.startsWith('image/')) {
+                              toast.error("Please select an image file");
+                              return;
+                            }
+                            
+                            // Clean up previous object URL
+                            if (objectUrl) {
+                              URL.revokeObjectURL(objectUrl);
+                            }
+                            // Create new object URL
+                            const newObjectUrl = URL.createObjectURL(file);
+                            setObjectUrl(newObjectUrl);
+                            setProfileForm({...profileForm, photo: file});
+                          }
+                        }}
+                        style={{
+                          width: "100%",
+                          padding: "0.5rem",
                       borderRadius: "6px",
-                      border: "1px solid #cbd5e1",
-                      background: editProfile ? "#ef4444" : "#2563eb",
-                      color: "#fff",
-                      cursor: "pointer",
-                      fontWeight: "500"
-                    }}
-                  >
-                    {editProfile ? "Cancel" : "Edit Profile"}
+                          border: "1px solid #d1d5db",
+                          background: "#fff"
+                        }}
+                      />
+                      {profileForm.photo instanceof File && (
+                        <div style={{ marginTop: "0.5rem", fontSize: "0.75rem", color: "#059669" }}>
+                          Selected: {profileForm.photo.name} ({(profileForm.photo.size / 1024 / 1024).toFixed(2)} MB)
+                        </div>
+                      )}
+                      <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.5rem", justifyContent: "center" }}>
+                        <button
+                          type="button"
+                          onClick={() => setProfileForm({...profileForm, photo: ""})}
+                          style={{
+                            background: "#ef4444",
+                            color: "white",
+                            border: "none",
+                            padding: "0.25rem 0.5rem",
+                            borderRadius: "4px",
+                            fontSize: "0.75rem",
+                            cursor: "pointer"
+                          }}
+                        >
+                          Remove Photo
                   </button>
+                      </div>
+                      <small style={{ color: "#6b7280", fontSize: "0.875rem" }}>
+                        Recommended: Square image, max 2MB
+                      </small>
+                    </div>
                 </div>
 
-                {editProfile ? (
-                  <form onSubmit={handleProfileUpdate}>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
                       <div>
-                        <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
-                          Name:
+                      <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "500" }}>
+                        Name
                         </label>
                         <input
                           type="text"
                           value={profileForm.name}
-                          onChange={(e) => setProfileForm(prev => ({ ...prev, name: e.target.value }))}
-                          required
-                          style={{ width: "100%", padding: "0.5rem", borderRadius: 6, border: "1px solid #cbd5e1" }}
+                        onChange={(e) => setProfileForm({...profileForm, name: e.target.value})}
+                        style={{
+                          width: "100%",
+                          padding: "0.75rem",
+                          borderRadius: "6px",
+                          border: "1px solid #d1d5db",
+                          background: "#fff"
+                        }}
                         />
                       </div>
                       <div>
-                        <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
-                          Category:
+                      <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "500" }}>
+                        Category
                         </label>
                         <input
                           type="text"
                           value={profileForm.category}
-                          onChange={(e) => setProfileForm(prev => ({ ...prev, category: e.target.value }))}
-                          required
-                          style={{ width: "100%", padding: "0.5rem", borderRadius: 6, border: "1px solid #cbd5e1" }}
+                        onChange={(e) => setProfileForm({...profileForm, category: e.target.value})}
+                        style={{
+                          width: "100%",
+                          padding: "0.75rem",
+                          borderRadius: "6px",
+                          border: "1px solid #d1d5db",
+                          background: "#fff"
+                        }}
                         />
                       </div>
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
                       <div>
-                        <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
-                          Qualifications:
+                      <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "500" }}>
+                        Qualifications
                         </label>
                         <input
                           type="text"
                           value={profileForm.qualifications}
-                          onChange={(e) => setProfileForm(prev => ({ ...prev, qualifications: e.target.value }))}
-                          style={{ width: "100%", padding: "0.5rem", borderRadius: 6, border: "1px solid #cbd5e1" }}
+                        onChange={(e) => setProfileForm({...profileForm, qualifications: e.target.value})}
+                        style={{
+                          width: "100%",
+                          padding: "0.75rem",
+                          borderRadius: "6px",
+                          border: "1px solid #d1d5db",
+                          background: "#fff"
+                        }}
                         />
                       </div>
                       <div>
-                        <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
-                          Experience (years):
+                      <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "500" }}>
+                        Experience (years)
                         </label>
                         <input
                           type="number"
                           value={profileForm.experience}
-                          onChange={(e) => setProfileForm(prev => ({ ...prev, experience: e.target.value }))}
-                          style={{ width: "100%", padding: "0.5rem", borderRadius: 6, border: "1px solid #cbd5e1" }}
+                        onChange={(e) => setProfileForm({...profileForm, experience: e.target.value})}
+                        style={{
+                          width: "100%",
+                          padding: "0.75rem",
+                          borderRadius: "6px",
+                          border: "1px solid #d1d5db",
+                          background: "#fff"
+                        }}
                         />
                       </div>
                     </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
-                      <div>
-                        <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
-                          Expertise:
+                  <div style={{ marginBottom: "1.5rem" }}>
+                    <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "500" }}>
+                      Expertise
                         </label>
-                        <input
-                          type="text"
+                    <textarea
                           value={profileForm.expertise}
-                          onChange={(e) => setProfileForm(prev => ({ ...prev, expertise: e.target.value }))}
-                          style={{ width: "100%", padding: "0.5rem", borderRadius: 6, border: "1px solid #cbd5e1" }}
+                      onChange={(e) => setProfileForm({...profileForm, expertise: e.target.value})}
+                      style={{
+                        width: "100%",
+                        padding: "0.75rem",
+                        borderRadius: "6px",
+                        border: "1px solid #d1d5db",
+                        background: "#fff",
+                        minHeight: "80px",
+                        resize: "vertical"
+                      }}
                         />
                       </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
                       <div>
-                        <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
-                          Fee:
+                      <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "500" }}>
+                        Fee
                         </label>
                         <input
                           type="number"
                           value={profileForm.fee}
-                          onChange={(e) => setProfileForm(prev => ({ ...prev, fee: e.target.value }))}
-                          required
-                          style={{ width: "100%", padding: "0.5rem", borderRadius: 6, border: "1px solid #cbd5e1" }}
+                        onChange={(e) => setProfileForm({...profileForm, fee: e.target.value})}
+                        style={{
+                          width: "100%",
+                          padding: "0.75rem",
+                          borderRadius: "6px",
+                          border: "1px solid #d1d5db",
+                          background: "#fff"
+                        }}
                         />
                       </div>
-                    </div>
-                    <div style={{ marginBottom: "1rem" }}>
-                      <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 500 }}>
-                        Contact Info:
+                    <div>
+                      <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "500" }}>
+                        Contact Info
                       </label>
                       <input
-                        type="email"
+                        type="text"
                         value={profileForm.contactInfo}
-                        onChange={(e) => setProfileForm(prev => ({ ...prev, contactInfo: e.target.value }))}
-                        style={{ width: "100%", padding: "0.5rem", borderRadius: 6, border: "1px solid #cbd5e1" }}
+                        onChange={(e) => setProfileForm({...profileForm, contactInfo: e.target.value})}
+                        style={{
+                          width: "100%",
+                          padding: "0.75rem",
+                          borderRadius: "6px",
+                          border: "1px solid #d1d5db",
+                          background: "#fff"
+                        }}
                       />
                     </div>
+                  </div>
+                  <div style={{ display: "flex", gap: "1rem" }}>
                     <button
                       type="submit"
                       style={{
+                        background: "#3b82f6",
+                        color: "white",
+                        border: "none",
                         padding: "0.75rem 1.5rem",
                         borderRadius: "6px",
-                        border: "none",
-                        background: "#2563eb",
-                        color: "#fff",
-                        cursor: "pointer",
-                        fontWeight: "600"
+                        fontWeight: "600",
+                        cursor: "pointer"
                       }}
                     >
-                      Update Profile
+                      Save Changes
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditProfile(false)}
+                      style={{
+                        background: "#6b7280",
+                        color: "white",
+                        border: "none",
+                        padding: "0.75rem 1.5rem",
+                        borderRadius: "6px",
+                        fontWeight: "600",
+                        cursor: "pointer"
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
                   </form>
+              </div>
                 ) : (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}>
-                    <div>
-                      <h4 style={{ marginBottom: "1rem", color: "#374151" }}>Basic Information</h4>
-                      <div style={{ marginBottom: "0.5rem" }}>
-                        <strong>Name:</strong> {doctorInfo.name}
-                      </div>
-                      <div style={{ marginBottom: "0.5rem" }}>
-                        <strong>Category:</strong> {doctorInfo.category}
-                      </div>
-                      <div style={{ marginBottom: "0.5rem" }}>
-                        <strong>Qualifications:</strong> {doctorInfo.qualifications || "Not specified"}
-                      </div>
-                      <div style={{ marginBottom: "0.5rem" }}>
-                        <strong>Experience:</strong> {doctorInfo.experience || "Not specified"} years
-                      </div>
-                    </div>
-                    <div>
-                      <h4 style={{ marginBottom: "1rem", color: "#374151" }}>Professional Details</h4>
-                      <div style={{ marginBottom: "0.5rem" }}>
-                        <strong>Expertise:</strong> {doctorInfo.expertise || "Not specified"}
-                      </div>
-                      <div style={{ marginBottom: "0.5rem" }}>
-                        <strong>Fee:</strong> Rs. {doctorInfo.fee}
-                      </div>
-                      <div style={{ marginBottom: "0.5rem" }}>
-                        <strong>Contact:</strong> {doctorInfo.contactInfo || "Not specified"}
-                      </div>
-                      <div style={{ marginBottom: "0.5rem" }}>
-                        <strong>Status:</strong> 
-                        <span style={{ 
-                          color: getStatusColor(doctorInfo.availabilityStatus),
-                          fontWeight: "500",
-                          marginLeft: "0.5rem"
-                        }}>
-                          {doctorInfo.availabilityStatus}
-                        </span>
-                      </div>
+              <div style={{ 
+                background: "#fff", 
+                padding: "2rem", 
+                borderRadius: "12px",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.03)"
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+                  <h3 style={{ color: "#1e293b" }}>Profile Information</h3>
+                  <button
+                    onClick={() => setEditProfile(true)}
+                    style={{
+                      background: "#3b82f6",
+                      color: "white",
+                      border: "none",
+                      padding: "0.5rem 1rem",
+                      borderRadius: "6px",
+                      fontWeight: "600",
+                      cursor: "pointer"
+                    }}
+                  >
+                    <FaEdit style={{ marginRight: "0.5rem" }} />
+                    Edit Profile
+                  </button>
+                </div>
+                
+                {/* Profile Picture Display */}
+                {doctorInfo && (
+                  <div style={{ textAlign: "center", marginBottom: "2rem" }}>
+                    <div style={{
+                      width: "120px",
+                      height: "120px",
+                      borderRadius: "50%",
+                      margin: "0 auto 1rem",
+                      overflow: "hidden",
+                      border: "3px solid #e5e7eb"
+                    }}>
+                      <img
+                        src={doctorInfo.photo || ""}
+                        alt="Profile"
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover"
+                        }}
+                        onError={(e) => {
+                          e.target.style.display = "none";
+                        }}
+                      />
                     </div>
                   </div>
                 )}
+                
+                {doctorInfo ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}>
+                    <div>
+                      <h4 style={{ marginBottom: "0.5rem", color: "#374151" }}>Basic Information</h4>
+                      <div style={{ marginBottom: "1rem" }}>
+                        <strong>Name:</strong> {doctorInfo.name}
+                      </div>
+                      <div style={{ marginBottom: "1rem" }}>
+                        <strong>Category:</strong> {doctorInfo.category}
+                      </div>
+                      <div style={{ marginBottom: "1rem" }}>
+                        <strong>Qualifications:</strong> {doctorInfo.qualifications}
+                      </div>
+                      <div style={{ marginBottom: "1rem" }}>
+                        <strong>Experience:</strong> {doctorInfo.experience} years
+                      </div>
+                    </div>
+                    <div>
+                      <h4 style={{ marginBottom: "0.5rem", color: "#374151" }}>Additional Details</h4>
+                      <div style={{ marginBottom: "1rem" }}>
+                        <strong>Expertise:</strong> {doctorInfo.expertise}
+                      </div>
+                      <div style={{ marginBottom: "1rem" }}>
+                        <strong>Fee:</strong> Rs. {doctorInfo.fee}
+                      </div>
+                      <div style={{ marginBottom: "1rem" }}>
+                        <strong>Contact:</strong> {doctorInfo.contactInfo}
+                      </div>
+                      </div>
+                    </div>
+                ) : (
+                  <div style={{ textAlign: "center", color: "#64748b", padding: "2rem" }}>
+                    No profile information available
+                  </div>
+                )}
               </div>
-            ) : (
-              <p>Loading profile...</p>
             )}
           </div>
         )}
@@ -735,18 +1114,25 @@ export default function DoctorPanel() {
         {active === "History" && (
           <div>
             <div style={{ 
-              display: "flex", 
-              gap: "1rem", 
-              marginBottom: "1rem", 
-              alignItems: "center",
-              flexWrap: "wrap"
+              background: "#fff", 
+              padding: "1.5rem", 
+              borderRadius: "12px", 
+              marginBottom: "2rem",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.03)"
             }}>
+              <h3 style={{ marginBottom: "1rem", color: "#1e293b" }}>Filters</h3>
+              <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="admin-filter-select"
+                  style={{
+                    padding: "0.5rem",
+                    borderRadius: "6px",
+                    border: "1px solid #d1d5db",
+                    background: "#fff"
+                  }}
               >
-                <option value="">All Statuses</option>
+                  <option value="">All Status</option>
                 <option value="completed">Completed</option>
                 <option value="cancelled">Cancelled</option>
                 <option value="no_show">No Show</option>
@@ -755,29 +1141,24 @@ export default function DoctorPanel() {
                 type="date"
                 value={filterDate}
                 onChange={(e) => setFilterDate(e.target.value)}
-                className="admin-filter-input"
-              />
-              <button
-                onClick={() => {
-                  setFilterStatus("");
-                  setFilterDate("");
-                }}
-                className="admin-clear-btn"
-              >
-                Clear
-              </button>
+                  style={{
+                    padding: "0.5rem",
+                    borderRadius: "6px",
+                    border: "1px solid #d1d5db",
+                    background: "#fff"
+                  }}
+                />
+              </div>
             </div>
 
-            {historyLoading && <p>Loading history...</p>}
-            {!historyLoading && (
+            <div className="admin-table-container">
               <table className="admin-table">
                 <thead>
                   <tr>
                     <th>Patient</th>
                     <th>Date & Time</th>
-                    <th>Reason</th>
                     <th>Status</th>
-                    <th>Actions</th>
+                    <th>Notes</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -789,107 +1170,120 @@ export default function DoctorPanel() {
                             {app.userId ? `${app.userId.firstName} ${app.userId.lastName}` : "Unknown"}
                           </div>
                           <div style={{ fontSize: "0.9rem", color: "#64748b" }}>
-                            {app.userId?.email || "N/A"}
+                            {app.userId?.email}
                           </div>
                         </div>
                       </td>
                       <td>
                         <div>
-                          <div style={{ fontWeight: "500" }}>
-                            {app.slot?.date || "N/A"}
-                          </div>
+                          <div>{app.slot?.date}</div>
                           <div style={{ fontSize: "0.9rem", color: "#64748b" }}>
-                            {app.slot?.startTime}-{app.slot?.endTime}
+                            {app.slot?.startTime} - {app.slot?.endTime}
                           </div>
                         </div>
                       </td>
-                      <td>{app.reason || "-"}</td>
-                      <td style={{ color: getStatusColor(app.status), fontWeight: 500 }}>{app.status}</td>
                       <td>
-                        <button
-                          title="View Details"
-                          onClick={() => setViewAppointment(app)}
-                          className="admin-action-btn"
-                        >
-                          <FaEye />
-                        </button>
+                        <span style={{ 
+                          color: getStatusColor(app.status), 
+                          fontWeight: "500",
+                          textTransform: "capitalize"
+                        }}>
+                          {app.status.replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td>
+                        {app.notes || "No notes"}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            )}
-            {filteredHistory.length === 0 && !historyLoading && (
-              <div style={{ textAlign: "center", color: "#6b7280", marginTop: "2rem" }}>
-                No appointment history found.
+              {filteredHistory.length === 0 && (
+                <div style={{ 
+                  padding: "2rem", 
+                  textAlign: "center", 
+                  color: "#64748b",
+                  background: "#fff",
+                  borderRadius: "8px"
+                }}>
+                  No appointment history found
               </div>
             )}
+            </div>
           </div>
         )}
 
-        {/* Appointment Details Modal */}
+        {/* Appointment View Modal */}
         {viewAppointment && (
-          <div
-            style={{
+          <div style={{
               position: "fixed",
               top: 0,
               left: 0,
-              width: "100vw",
-              height: "100vh",
-              background: "rgba(0,0,0,0.25)",
-              zIndex: 1000,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.5)",
               display: "flex",
-              alignItems: "center",
               justifyContent: "center",
-            }}
-            onClick={() => setViewAppointment(null)}
-          >
-            <div
-              style={{
+            alignItems: "center",
+            zIndex: 1000
+          }}>
+            <div style={{
                 background: "#fff",
-                borderRadius: 12,
                 padding: "2rem",
-                minWidth: 400,
-                maxWidth: 500,
-                boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h3 style={{ marginBottom: "1rem", color: "#1e293b" }}>Appointment Details</h3>
+              borderRadius: "12px",
+              maxWidth: "500px",
+              width: "90%",
+              maxHeight: "80vh",
+              overflow: "auto"
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+                <h3 style={{ color: "#1e293b" }}>Appointment Details</h3>
+                <button
+                  onClick={() => setViewAppointment(null)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    fontSize: "1.5rem",
+                    cursor: "pointer",
+                    color: "#6b7280"
+                  }}
+                >
+                  ×
+                </button>
+              </div>
               <div style={{ marginBottom: "1rem" }}>
                 <strong>Patient:</strong> {viewAppointment.userId ? `${viewAppointment.userId.firstName} ${viewAppointment.userId.lastName}` : "Unknown"}
-                <br />
+              </div>
+              <div style={{ marginBottom: "1rem" }}>
                 <strong>Email:</strong> {viewAppointment.userId?.email || "N/A"}
-                <br />
-                <strong>Date:</strong> {viewAppointment.slot?.date || "N/A"}
-                <br />
+              </div>
+              <div style={{ marginBottom: "1rem" }}>
+                <strong>Date:</strong> {viewAppointment.slot?.date}
+              </div>
+              <div style={{ marginBottom: "1rem" }}>
                 <strong>Time:</strong> {viewAppointment.slot?.startTime} - {viewAppointment.slot?.endTime}
-                <br />
-                <strong>Reason:</strong> {viewAppointment.reason || "General consultation"}
-                <br />
+              </div>
+              <div style={{ marginBottom: "1rem" }}>
                 <strong>Status:</strong> 
                 <span style={{ 
                   color: getStatusColor(viewAppointment.status),
                   fontWeight: "500",
-                  marginLeft: "0.5rem"
+                  marginLeft: "0.5rem",
+                  textTransform: "capitalize"
                 }}>
-                  {viewAppointment.status}
+                  {viewAppointment.status.replace('_', ' ')}
                 </span>
               </div>
-              <button
-                onClick={() => setViewAppointment(null)}
-                style={{
-                  padding: "0.5rem 1.5rem",
-                  borderRadius: 6,
-                  border: "none",
-                  background: "#e0e7ff",
-                  color: "#2563eb",
-                  fontWeight: 500,
-                  cursor: "pointer",
-                }}
-              >
-                Close
-              </button>
+              {viewAppointment.reason && (
+                <div style={{ marginBottom: "1rem" }}>
+                  <strong>Reason:</strong> {viewAppointment.reason}
+                </div>
+              )}
+              {viewAppointment.urgency && (
+                <div style={{ marginBottom: "1rem" }}>
+                  <strong>Urgency:</strong> {viewAppointment.urgency}
+                </div>
+              )}
             </div>
           </div>
         )}

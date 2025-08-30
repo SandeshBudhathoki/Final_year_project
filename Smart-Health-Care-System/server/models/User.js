@@ -29,6 +29,7 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true,
     maxlength: [20, "Phone number cannot exceed 20 characters"],
+    match: [/^\+?[0-9]{7,20}$/, "Invalid phone number format"],
   },
   address: {
     type: String,
@@ -50,6 +51,10 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: [true, "Password is required"],
     minlength: [6, "Password must be at least 6 characters long"],
+  },
+  avatar: {
+    type: String,
+    default: "",
   },
   isEmailVerified: {
     type: Boolean,
@@ -79,12 +84,14 @@ const userSchema = new mongoose.Schema({
     enum: ["user", "admin", "doctor"],
     default: "user",
   },
+
+  // 🔗 If role=doctor, link with Doctor model
   doctorId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Doctor",
-    required: function() {
+    required: function () {
       return this.role === "doctor";
-    }
+    },
   },
 });
 
@@ -93,11 +100,11 @@ userSchema.virtual("fullName").get(function () {
   return `${this.firstName} ${this.lastName}`;
 });
 
-// Ensure virtual fields are serialized
+// Ensure virtuals are included in JSON/object
 userSchema.set("toJSON", { virtuals: true });
 userSchema.set("toObject", { virtuals: true });
 
-// Hash password before saving
+// Hash password before save
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
 
@@ -115,7 +122,7 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
-// Remove password from JSON output
+// Remove password field when sending JSON
 userSchema.methods.toJSON = function () {
   const userObject = this.toObject();
   delete userObject.password;

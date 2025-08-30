@@ -1,12 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { FiEdit2, FiCamera } from "react-icons/fi";
 
-// Helper to get initials from name
-function getInitials(firstName, lastName) {
-  return (
-    (firstName?.[0] || "").toUpperCase() + (lastName?.[0] || "").toUpperCase()
-  );
-}
+
 
 const Profile = () => {
   const [profile, setProfile] = useState({
@@ -44,6 +39,9 @@ const Profile = () => {
         });
         if (!res.ok) throw new Error("Failed to fetch profile");
         const data = await res.json();
+        console.log("Fetched profile data:", data.user);
+        console.log("Avatar value:", data.user.avatar);
+        console.log("Avatar URL constructed:", getAvatarUrl(data.user.avatar));
         setProfile(data.user);
         setOriginalProfile(data.user);
         setAvatarFile(null); // clear any local file
@@ -61,8 +59,27 @@ const Profile = () => {
   function getAvatarUrl(avatar) {
     if (!avatar) return "";
     if (avatar.startsWith("http")) return avatar;
-    // Always use backend port for avatars
-    return `http://localhost:5005${avatar}`;
+    if (avatar.startsWith("data:image")) return avatar;
+    const baseUrl = window.location.origin;
+    if (baseUrl.includes("localhost:3000")) {
+      return `http://localhost:5005${avatar}`;
+    } else {
+      return `${baseUrl}${avatar}`;
+    }
+  }
+
+  // Helper to get user initials
+  function getInitials(firstName, lastName) {
+    if (!firstName && !lastName) return "?";
+    const first = firstName ? firstName.charAt(0).toUpperCase() : "";
+    const last = lastName ? lastName.charAt(0).toUpperCase() : "";
+    return first + last;
+  }
+
+  // Helper to format fee
+  function formatFee(fee) {
+    if (!fee) return "";
+    return `Rs. ${fee}`;
   }
 
   const handleChange = (e) => {
@@ -161,6 +178,8 @@ const Profile = () => {
       });
       if (!res.ok) throw new Error("Failed to update profile");
       const data = await res.json();
+      console.log("Profile update response:", data);
+      console.log("Updated avatar:", data.user.avatar);
       // Always use backend path after save
       setProfile(data.user);
       setOriginalProfile(data.user);
@@ -180,6 +199,31 @@ const Profile = () => {
     );
   if (!token)
     return <div style={{ textAlign: "center", marginTop: 80 }}>Please log in to view your profile.</div>;
+
+  // Debug log for avatar
+  console.log("Rendering profile with avatar:", profile.avatar);
+  console.log("Doctor info:", profile.doctorInfo);
+  console.log("Avatar URL for rendering:", getAvatarUrl(profile.avatar));
+  console.log("Profile state:", profile);
+
+  // Check if avatar should be displayed
+  const shouldShowAvatar = (profile.avatar && profile.avatar.trim() !== "") || 
+                          (profile.doctorInfo && profile.doctorInfo.photo && profile.doctorInfo.photo.trim() !== "");
+  
+  // Get the appropriate image source
+  const getImageSource = () => {
+    if (profile.avatar && profile.avatar.trim() !== "") {
+      return getAvatarUrl(profile.avatar);
+    }
+    if (profile.doctorInfo && profile.doctorInfo.photo && profile.doctorInfo.photo.trim() !== "") {
+      return getAvatarUrl(profile.doctorInfo.photo);
+    }
+    return "";
+  };
+  
+  const avatarUrl = getImageSource();
+  console.log("Should show avatar:", shouldShowAvatar);
+  console.log("Avatar URL:", avatarUrl);
 
   return (
     <div
@@ -238,21 +282,43 @@ const Profile = () => {
           onClick={handleAvatarClick}
           title={editMode ? "Click to change photo" : "Profile photo"}
         >
-          {profile.avatar && !profile.avatar.startsWith('data:image') ? (
+          {shouldShowAvatar ? (
             <img
-              src={getAvatarUrl(profile.avatar)}
+              src={avatarUrl}
               alt="avatar"
               style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }}
+              onError={(e) => {
+                console.log("Image failed to load:", profile.avatar);
+                console.log("Constructed URL:", getAvatarUrl(profile.avatar));
+                e.target.style.display = "none";
+                // Show initials when image fails
+                const initialsSpan = e.target.parentNode.querySelector('.avatar-initials');
+                if (initialsSpan) {
+                  initialsSpan.style.display = "flex";
+                }
+              }}
+              onLoad={() => {
+                console.log("Image loaded successfully:", getAvatarUrl(profile.avatar));
+                // Hide initials when image loads successfully
+                const initialsSpan = e.target.parentNode.querySelector('.avatar-initials');
+                if (initialsSpan) {
+                  initialsSpan.style.display = "none";
+                }
+              }}
             />
-          ) : profile.avatar ? (
-            <img
-              src={profile.avatar}
-              alt="avatar"
-              style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }}
-            />
-          ) : (
-            <span>{getInitials(profile.firstName, profile.lastName)}</span>
-          )}
+          ) : null}
+          <span 
+            className="avatar-initials"
+            style={{ 
+              display: shouldShowAvatar ? "none" : "flex",
+              width: "100%",
+              height: "100%",
+              alignItems: "center",
+              justifyContent: "center"
+            }}
+          >
+            {getInitials(profile.firstName, profile.lastName)}
+          </span>
           <input
             type="file"
             accept="image/jpeg,image/png"
@@ -285,7 +351,7 @@ const Profile = () => {
           )}
         </div>
         <div style={{ fontSize: 22, fontWeight: 600, color: "#222" }}>
-          {profile.firstName} {profile.lastName}
+          {profile.doctorInfo ? profile.doctorInfo.name : `${profile.firstName} ${profile.lastName}`}
         </div>
         <div style={{ color: "#6b7280", fontSize: 15, marginTop: 2 }}>{profile.email}</div>
       </div>
@@ -389,6 +455,40 @@ const Profile = () => {
             <div style={{ padding: 8, background: "#f5f5f5", borderRadius: 6 }}>{profile.address}</div>
           )}
         </div>
+        
+        {/* Doctor Information Display */}
+        {profile.doctorInfo && (
+          <div style={{ 
+            background: "#f8fafc", 
+            padding: "1.5rem", 
+            borderRadius: 8, 
+            marginBottom: "1.5rem",
+            border: "1px solid #e2e8f0"
+          }}>
+            <h4 style={{ marginBottom: "1rem", color: "#1e293b", fontSize: "1.1rem" }}>Doctor Information</h4>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+              <div>
+                <strong>Category:</strong> {profile.doctorInfo.category}
+              </div>
+              <div>
+                <strong>Qualifications:</strong> {profile.doctorInfo.qualifications}
+              </div>
+              <div>
+                <strong>Experience:</strong> {profile.doctorInfo.experience} years
+              </div>
+              <div>
+                <strong>Expertise:</strong> {profile.doctorInfo.expertise || "Not specified"}
+              </div>
+              <div>
+                <strong>Fee:</strong> Rs. {profile.doctorInfo.fee}
+              </div>
+              <div>
+                <strong>Contact:</strong> {profile.doctorInfo.contactInfo}
+              </div>
+            </div>
+          </div>
+        )}
+        
         {editMode && (
           <div style={{ display: "flex", gap: 12 }}>
             <button

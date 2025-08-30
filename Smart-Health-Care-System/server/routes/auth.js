@@ -110,36 +110,105 @@ router.post(
 );
 
 // @route   POST /api/auth/login
-// @desc    Login user
+// @desc    Authenticate user & get token
 // @access  Public
-router.post(
-  "/login",
-  [
-    body("email").isEmail().normalizeEmail().withMessage("Please enter a valid email"),
-    body("password").exists().withMessage("Password is required"),
-  ],
-  async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ message: "Validation failed", errors: errors.array() });
-    }
-
+router.post("/login", async (req, res) => {
+  try {
     const { email, password } = req.body;
 
+    // Check if user exists
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).json({ message: "Invalid Email" });
+      return res.status(400).json({ message: "Invalid credentials" });
     }
 
+    // Check if password matches
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      return res.status(400).json({ message: "Invalid Password" });
+      return res.status(400).json({ message: "Invalid credentials" });
     }
 
-      const token = generateToken(user._id);
-  res.json({ message: "Login successful", token, user });
-}
-);
+    // Check if email is verified
+    if (!user.isEmailVerified) {
+      return res.status(400).json({ message: "Please verify your email first" });
+    }
+
+    // Generate token
+    const token = generateToken(user._id);
+
+    // Remove password from response
+    const userResponse = {
+      _id: user._id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: user.role,
+      doctorId: user.doctorId,
+      isEmailVerified: user.isEmailVerified,
+    };
+
+    res.json({
+      message: "Login successful",
+      token,
+      user: userResponse,
+    });
+  } catch (err) {
+    console.error("Login error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// @route   PATCH /api/auth/update-role
+// @desc    Update user role and doctorId (for doctor setup)
+// @access  Private
+router.patch("/update-role", auth, async (req, res) => {
+  try {
+    const { role, doctorId } = req.body;
+    const userId = req.user._id;
+
+    // Validate input
+    if (!role || !doctorId) {
+      return res.status(400).json({ message: "Role and doctorId are required" });
+    }
+
+    if (role !== "doctor") {
+      return res.status(400).json({ message: "Only doctor role is supported for this endpoint" });
+    }
+
+    // Update user
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { 
+        role: role,
+        doctorId: doctorId
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Remove password from response
+    const userResponse = {
+      _id: user._id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: user.role,
+      doctorId: user.doctorId,
+      isEmailVerified: user.isEmailVerified,
+    };
+
+    res.json({
+      message: "User role updated successfully",
+      user: userResponse,
+    });
+  } catch (err) {
+    console.error("Update role error:", err);
+    res.status(500).json({ message: "Failed to update user role" });
+  }
+});
 
 // Forgot Password (send 6-digit code)
 router.post("/forgot-password", async (req, res) => {

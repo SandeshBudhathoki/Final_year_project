@@ -1,5 +1,6 @@
 const express = require("express");
 const User = require("../models/User");
+const Doctor = require("../models/Doctor");
 const auth = require("../middleware/auth");
 const multer = require("multer");
 const path = require("path");
@@ -37,6 +38,20 @@ const upload = multer({
 router.get("/", auth, async (req, res) => {
   try {
     const user = req.user;
+    console.log("Getting profile for user:", user._id);
+    console.log("User avatar from DB:", user.avatar);
+    
+    // If user is a doctor, also fetch doctor information
+    let doctorInfo = null;
+    if (user.role === "doctor" && user.doctorId) {
+      try {
+        doctorInfo = await Doctor.findById(user.doctorId);
+        console.log("Found doctor info:", doctorInfo ? "Yes" : "No");
+      } catch (err) {
+        console.log("Error fetching doctor info:", err.message);
+      }
+    }
+    
     res.json({
       user: {
         id: user._id,
@@ -51,6 +66,17 @@ router.get("/", auth, async (req, res) => {
         avatar: user.avatar || "",
         createdAt: user.createdAt,
         lastLogin: user.lastLogin,
+        // Include doctor information if available
+        doctorInfo: doctorInfo ? {
+          name: doctorInfo.name,
+          category: doctorInfo.category,
+          qualifications: doctorInfo.qualifications,
+          experience: doctorInfo.experience,
+          expertise: doctorInfo.expertise,
+          fee: doctorInfo.fee,
+          contactInfo: doctorInfo.contactInfo,
+          photo: doctorInfo.photo || ""
+        } : null
       },
     });
   } catch (error) {
@@ -65,6 +91,11 @@ router.get("/", auth, async (req, res) => {
 router.put("/", auth, upload.single("avatar"), async (req, res) => {
   try {
     const user = req.user;
+    console.log("Updating profile for user:", user._id);
+    console.log("Request body:", req.body);
+    console.log("Request file:", req.file);
+    console.log("Current user avatar:", user.avatar);
+    
     // Accept both JSON and multipart/form-data
     const data = req.body;
     const { firstName, lastName, gender, age, phone, address } = data;
@@ -79,9 +110,13 @@ router.put("/", auth, upload.single("avatar"), async (req, res) => {
     if (req.file) {
       // Save avatar URL (relative path)
       user.avatar = `/uploads/avatars/${req.file.filename}`;
+      console.log("New avatar path set:", user.avatar);
     }
+    // If no new avatar uploaded, keep the existing one (don't overwrite)
+    console.log("Final avatar value before save:", user.avatar);
 
     await user.save();
+    console.log("User saved successfully, avatar:", user.avatar);
 
     res.json({
       message: "Profile updated successfully",
